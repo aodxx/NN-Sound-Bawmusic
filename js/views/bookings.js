@@ -1,419 +1,246 @@
 /**
- * BAWMUSIC — Booking Form (Module 2: Core)
- * Full-screen modal for creating/editing bookings with equipment checklist
+ * BAWMUSIC — Bookings View
+ * แสดงผลแบบปฏิทิน (ค่าเริ่มต้น) พร้อมสลับดูเป็นรายการได้
  */
 
-const JOB_TYPES = [
-  { value: 'Wedding', label: 'งานแต่งงาน', icon: 'fa-rings-wedding' },
-  { value: 'Ordination', label: 'งานบวช', icon: 'fa-om' },
-  { value: 'Funeral', label: 'งานศพ', icon: 'fa-fire-flame-simple' },
-  { value: 'Corporate', label: 'งานองค์กร', icon: 'fa-briefcase' },
-  { value: 'Birthday', label: 'งานวันเกิด', icon: 'fa-cake-candles' },
-  { value: 'Concert', label: 'คอนเสิร์ต', icon: 'fa-guitar' },
-  { value: 'Custom', label: 'อื่นๆ', icon: 'fa-star' }
+let __bookingsCache = [];
+let __bookingsFilter = { status: '', jobType: '' };
+let __bookingsViewMode = 'calendar'; // 'calendar' | 'list'
+let __calendarCursor = new Date(); // เดือน/ปีที่กำลังดูอยู่บนปฏิทิน
+
+const THAI_MONTHS_FULL = [
+  'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+  'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
 ];
+const THAI_WEEKDAYS = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
 
-let __bookingFormState = null;
-let __bookingFormTemplates = [];
-let __bookingFormCustomers = [];
-
-async function openBookingForm(id) {
-  Utils.loading('กำลังเตรียมฟอร์ม...');
+async function renderBookings() {
+  const container = document.getElementById('view-bookings');
+  container.innerHTML = `<div class="space-y-3 animate-pulse"><div class="h-16 bg-navy-light rounded-2xl"></div><div class="h-16 bg-navy-light rounded-2xl"></div></div>`;
 
   try {
-    const [equipment, templates, customers, existing] = await Promise.all([
-      __equipmentCache.length ? Promise.resolve(__equipmentCache) : BawmusicAPI.listEquipment(),
-      BawmusicAPI.listTemplates(),
-      BawmusicAPI.listCustomers(),
-      id ? BawmusicAPI.getBooking(id) : Promise.resolve(null)
-    ]);
-    __equipmentCache = equipment;
-    __bookingFormTemplates = templates || [];
-    __bookingFormCustomers = customers || [];
-
-    __bookingFormState = {
-      id: existing?.id || null,
-      customerId: existing?.customerId || '',
-      customerName: existing?.customerName || '',
-      phone: existing?.phone || '',
-      line: existing?.line || '',
-      venue: existing?.venue || '',
-      mapLink: existing?.mapLink || '',
-      province: existing?.province || '',
-      date: existing?.date ? new Date(existing.date).toISOString().slice(0, 10) : '',
-      startTime: existing?.startTime || '',
-      endTime: existing?.endTime || '',
-      jobType: existing?.jobType || 'Wedding',
-      package: existing?.package || '',
-      price: existing?.price || '',
-      deposit: existing?.deposit || '',
-      remarks: existing?.remarks || '',
-      status: existing?.status || 'confirmed',
-      equipment: existing?.equipment || [] // [{name, qty}]
-    };
-
-    Utils.closeLoading();
-    paintBookingForm(equipment, templates);
+    __bookingsCache = await BawmusicAPI.listBookings({});
+    paintBookingsRoot();
   } catch (err) {
-    Utils.closeLoading();
-    Utils.toast('error', 'โหลดฟอร์มไม่สำเร็จ: ' + err.message);
+    container.innerHTML = errorState(err);
   }
 }
 
-function paintBookingForm(equipment, templates) {
-  const root = document.getElementById('modal-root');
-  const s = __bookingFormState;
+function paintBookingsRoot() {
+  const container = document.getElementById('view-bookings');
+  if (!container) return;
 
-  const categorized = {};
-  equipment.forEach(e => {
-    categorized[e.category] = categorized[e.category] || [];
-    categorized[e.category].push(e);
-  });
-
-  root.innerHTML = `
-  <div class="fixed inset-0 z-50 bg-navy-dark overflow-y-auto" id="booking-modal">
-    <div class="sticky top-0 bg-navy-dark/95 backdrop-blur border-b border-gold/20 px-4 py-3 flex items-center justify-between z-10">
-      <button onclick="closeBookingForm()" class="text-gray-400"><i class="fa-solid fa-xmark text-lg"></i></button>
-      <h2 class="text-sm font-semibold text-gold">${s.id ? 'แก้ไขการจอง' : 'จองงานใหม่'}</h2>
-      <button onclick="submitBookingForm()" class="text-gold text-sm font-semibold">บันทึก</button>
-    </div>
-
-    <div class="px-4 py-4 max-w-2xl mx-auto space-y-4 pb-10">
-
-      <!-- Job Templates -->
-      <div class="flex gap-2 overflow-x-auto pb-1">
-        ${templates.map((t, i) => `
-          <button onclick="applyTemplateByIndex(${i})"
-            class="flex-shrink-0 px-3 py-2 bg-navy-light border border-gold/20 rounded-xl text-sm text-gray-200">
-            <i class="fa-solid fa-wand-magic-sparkles text-gold mr-1"></i>${t.name}
-          </button>
-        `).join('')}
-      </div>
-
-      <!-- Customer Info -->
-      <section class="bg-navy-light rounded-2xl p-4 border border-gold/10 shadow-sm shadow-black/5">
-        <h3 class="text-sm font-semibold text-gold mb-3"><i class="fa-solid fa-user mr-1.5"></i>ข้อมูลลูกค้า</h3>
-        <div class="space-y-2.5">
-          <div>
-            <label class="text-sm text-gray-500 block mb-1">ชื่อลูกค้า</label>
-            <input id="field-customerName" type="text" list="customer-suggestions" value="${s.customerName || ''}"
-              oninput="updateField('customerName', this.value); handleCustomerNameInput(this.value);"
-              class="w-full bg-navy border border-gold/10 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-gold/40">
-            <datalist id="customer-suggestions">
-              ${__bookingFormCustomers.map(c => `<option value="${c.name}">`).join('')}
-            </datalist>
-            <p id="customer-match-hint" class="text-sm mt-1 ${s.customerId ? 'text-green-400' : 'text-gray-500'}">
-              ${s.customerId ? '✓ ลูกค้าเดิม — จะอัปเดตข้อมูลอัตโนมัติ' : 'พิมพ์ชื่อ ถ้าเป็นลูกค้าใหม่ระบบจะบันทึกให้อัตโนมัติ'}
-            </p>
-          </div>
-          <div class="grid grid-cols-2 gap-2.5">
-            ${formInput('phone', 'เบอร์โทร', s.phone, 'tel')}
-            ${formInput('line', 'LINE ID', s.line, 'text')}
-          </div>
-        </div>
-      </section>
-
-      <!-- Venue -->
-      <section class="bg-navy-light rounded-2xl p-4 border border-gold/10 shadow-sm shadow-black/5">
-        <h3 class="text-sm font-semibold text-gold mb-3"><i class="fa-solid fa-location-dot mr-1.5"></i>สถานที่จัดงาน</h3>
-        <div class="space-y-2.5">
-          ${formInput('venue', 'ชื่อสถานที่', s.venue, 'text')}
-          ${formInput('mapLink', 'ลิงก์ Google Maps', s.mapLink, 'url')}
-          ${selectInput('province', 'จังหวัด', s.province, Utils.provinces.map(p => ({ value: p, label: p })))}
-        </div>
-      </section>
-
-      <!-- Date & Time -->
-      <section class="bg-navy-light rounded-2xl p-4 border border-gold/10 shadow-sm shadow-black/5">
-        <h3 class="text-sm font-semibold text-gold mb-3"><i class="fa-regular fa-calendar mr-1.5"></i>วันและเวลา</h3>
-        <div class="space-y-2.5">
-          ${formInput('date', 'วันที่จัดงาน', s.date, 'date')}
-          <div class="grid grid-cols-2 gap-2.5">
-            ${formInput('startTime', 'เวลาเริ่ม', s.startTime, 'time')}
-            ${formInput('endTime', 'เวลาสิ้นสุด', s.endTime, 'time')}
-          </div>
-        </div>
-        <div id="conflict-warning"></div>
-      </section>
-
-      <!-- Job Type -->
-      <section class="bg-navy-light rounded-2xl p-4 border border-gold/10 shadow-sm shadow-black/5">
-        <h3 class="text-sm font-semibold text-gold mb-3"><i class="fa-solid fa-tag mr-1.5"></i>ประเภทงาน</h3>
-        <div class="grid grid-cols-4 gap-2">
-          ${JOB_TYPES.map(jt => `
-            <button onclick="setJobType('${jt.value}')" id="jobtype-${jt.value}"
-              class="flex flex-col items-center gap-1 py-2.5 rounded-xl border transition-colors ${s.jobType === jt.value ? 'bg-gold/20 border-gold text-gold' : 'bg-navy border-gold/10 text-gray-400'}">
-              <i class="fa-solid ${jt.icon} text-sm"></i>
-              <span class="text-sm">${jt.label}</span>
-            </button>
-          `).join('')}
-        </div>
-      </section>
-
-      <!-- Pricing -->
-      <section class="bg-navy-light rounded-2xl p-4 border border-gold/10 shadow-sm shadow-black/5">
-        <h3 class="text-sm font-semibold text-gold mb-3"><i class="fa-solid fa-money-bill-wave mr-1.5"></i>ราคาและมัดจำ</h3>
-        <div class="space-y-2.5">
-          ${formInput('package', 'แพ็คเกจ', s.package, 'text')}
-          <div class="grid grid-cols-2 gap-2.5">
-            ${formInput('price', 'ราคาทั้งหมด (บาท)', s.price, 'number')}
-            ${formInput('deposit', 'มัดจำ (บาท)', s.deposit, 'number')}
-          </div>
-          <p class="text-sm text-gray-400">ยอดคงเหลือ: <span class="text-gold font-medium" id="remaining-display">${Utils.formatMoney((Number(s.price) || 0) - (Number(s.deposit) || 0))}</span></p>
-        </div>
-      </section>
-
-      <!-- Equipment -->
-      <section class="bg-navy-light rounded-2xl p-4 border border-gold/10 shadow-sm shadow-black/5">
-        <h3 class="text-sm font-semibold text-gold mb-3"><i class="fa-solid fa-boxes-stacked mr-1.5"></i>เลือกอุปกรณ์</h3>
-        <div class="space-y-3">
-          ${Object.keys(categorized).map(cat => `
-            <div>
-              <p class="text-sm text-gray-500 mb-1.5 uppercase">${CATEGORY_LABELS[cat] || cat}</p>
-              <div class="space-y-1.5">
-                ${categorized[cat].map(e => equipmentCheckRow(e)).join('')}
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      </section>
-
-      <!-- Remarks -->
-      <section class="bg-navy-light rounded-2xl p-4 border border-gold/10 shadow-sm shadow-black/5">
-        <h3 class="text-sm font-semibold text-gold mb-3"><i class="fa-solid fa-note-sticky mr-1.5"></i>หมายเหตุ</h3>
-        <textarea id="field-remarks" oninput="updateField('remarks', this.value)"
-          class="w-full bg-navy border border-gold/10 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-gold/40" rows="2">${s.remarks}</textarea>
-      </section>
-
-      ${s.id ? `
-      <button onclick="openJobSummary('${s.id}')" class="w-full bg-gold/10 border border-gold/30 text-gold text-sm font-medium rounded-xl py-2.5">
-        <i class="fa-solid fa-file-invoice mr-1.5"></i>ดูสรุปงาน / แชร์
+  container.innerHTML = `
+    <div class="flex items-center gap-2 mb-3">
+      <button onclick="window.__setBookingsView('calendar')"
+        class="flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors ${__bookingsViewMode === 'calendar' ? 'bg-gold text-navy-dark' : 'bg-navy-light text-gray-400'}">
+        <i class="fa-regular fa-calendar mr-1.5"></i>ปฏิทิน
       </button>
-      <button onclick="deleteBookingConfirm('${s.id}')" class="w-full bg-red-500/10 border border-red-500/30 text-red-400 text-sm font-medium rounded-xl py-2.5">
-        <i class="fa-solid fa-trash mr-1.5"></i>ลบการจองนี้
-      </button>` : ''}
+      <button onclick="window.__setBookingsView('list')"
+        class="flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors ${__bookingsViewMode === 'list' ? 'bg-gold text-navy-dark' : 'bg-navy-light text-gray-400'}">
+        <i class="fa-solid fa-list mr-1.5"></i>รายการ
+      </button>
     </div>
-  </div>
+    <div id="bookings-view-content"></div>
   `;
+
+  if (__bookingsViewMode === 'calendar') paintCalendarView();
+  else paintBookingsListView();
 }
 
-function formInput(field, label, value, type) {
-  return `
-    <div>
-      <label class="text-sm text-gray-500 block mb-1">${label}</label>
-      <input id="field-${field}" type="${type}" value="${value || ''}" oninput="updateField('${field}', this.value)"
-        class="w-full bg-navy border border-gold/10 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-gold/40">
-    </div>
-  `;
-}
+window.__setBookingsView = (mode) => {
+  __bookingsViewMode = mode;
+  paintBookingsRoot();
+};
 
-function selectInput(field, label, value, options) {
-  return `
-    <div>
-      <label class="text-sm text-gray-500 block mb-1">${label}</label>
-      <select id="field-${field}" onchange="updateField('${field}', this.value)"
-        class="w-full bg-navy border border-gold/10 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-gold/40">
-        <option value="">เลือก${label}</option>
-        ${options.map(o => `<option value="${o.value}" ${value === o.value ? 'selected' : ''}>${o.label}</option>`).join('')}
-      </select>
-    </div>
-  `;
-}
+// ================== CALENDAR VIEW ==================
 
-function equipmentCheckRow(e) {
-  const s = __bookingFormState;
-  const selected = s.equipment.find(item => item.name === e.name);
-  return `
-    <div class="flex items-center justify-between bg-navy rounded-lg px-3 py-2">
-      <label class="flex items-center gap-2 flex-1">
-        <input type="checkbox" ${selected ? 'checked' : ''} onchange="toggleEquipment('${e.name}', this.checked)" class="accent-gold w-4 h-4">
-        <span class="text-sm text-gray-200">${e.name}</span>
-      </label>
-      ${selected ? `
-        <input type="number" min="1" max="${e.availableQty}" value="${selected.qty || 1}"
-          onchange="updateEquipmentQty('${e.name}', this.value)"
-          class="w-14 bg-navy-light border border-gold/20 rounded px-2 py-1 text-sm text-gray-100 text-center">
-      ` : `<span class="text-sm text-gray-500">มี ${e.availableQty} ${e.unit}</span>`}
-    </div>
-  `;
-}
-
-function updateField(field, value) {
-  __bookingFormState[field] = value;
-  if (field === 'price' || field === 'deposit') {
-    const remaining = (Number(__bookingFormState.price) || 0) - (Number(__bookingFormState.deposit) || 0);
-    const el = document.getElementById('remaining-display');
-    if (el) el.textContent = Utils.formatMoney(remaining);
-  }
-}
-
-function handleCustomerNameInput(name) {
-  const hint = document.getElementById('customer-match-hint');
-  const match = __bookingFormCustomers.find(c => c.name && c.name.trim() === name.trim());
-
-  if (match) {
-    __bookingFormState.customerId = match.id;
-    __bookingFormState.phone = match.phone || '';
-    __bookingFormState.line = match.line || '';
-    const phoneEl = document.getElementById('field-phone');
-    const lineEl = document.getElementById('field-line');
-    if (phoneEl) phoneEl.value = match.phone || '';
-    if (lineEl) lineEl.value = match.line || '';
-    if (hint) {
-      hint.textContent = '✓ ลูกค้าเดิม — ดึงเบอร์โทร/LINE ให้อัตโนมัติแล้ว';
-      hint.className = 'text-sm mt-1 text-green-400';
-    }
-  } else {
-    __bookingFormState.customerId = '';
-    if (hint) {
-      hint.textContent = name.trim() ? 'ลูกค้าใหม่ — ระบบจะบันทึกเข้าหน้าลูกค้าให้อัตโนมัติ' : 'พิมพ์ชื่อ ถ้าเป็นลูกค้าใหม่ระบบจะบันทึกให้อัตโนมัติ';
-      hint.className = 'text-sm mt-1 text-gray-500';
-    }
-  }
-}
-
-function setJobType(value) {
-  __bookingFormState.jobType = value;
-  JOB_TYPES.forEach(jt => {
-    const btn = document.getElementById('jobtype-' + jt.value);
-    if (btn) btn.className = `flex flex-col items-center gap-1 py-2.5 rounded-xl border transition-colors ${jt.value === value ? 'bg-gold/20 border-gold text-gold' : 'bg-navy border-gold/10 text-gray-400'}`;
+function bookingsByDateKey() {
+  const map = {};
+  __bookingsCache.forEach(b => {
+    if (!b.date) return;
+    const d = new Date(b.date);
+    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    (map[key] = map[key] || []).push(b);
   });
+  return map;
 }
 
-function toggleEquipment(name, checked) {
-  if (checked) {
-    __bookingFormState.equipment.push({ name, qty: 1 });
-  } else {
-    __bookingFormState.equipment = __bookingFormState.equipment.filter(e => e.name !== name);
+function paintCalendarView() {
+  const el = document.getElementById('bookings-view-content');
+  if (!el) return;
+
+  const year = __calendarCursor.getFullYear();
+  const month = __calendarCursor.getMonth();
+  const firstWeekday = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const byDate = bookingsByDateKey();
+  const today = new Date();
+
+  let cells = '';
+  for (let i = 0; i < firstWeekday; i++) cells += `<div></div>`;
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const key = `${year}-${month}-${day}`;
+    const dayBookings = byDate[key] || [];
+    const isToday = today.getFullYear() === year && today.getMonth() === month && today.getDate() === day;
+    cells += calendarCell(day, dayBookings, isToday, year, month);
   }
-  paintBookingForm(__equipmentCache, __bookingFormTemplates);
+
+  el.innerHTML = `
+    <div class="bg-navy-light rounded-2xl p-3 border border-gold/10 shadow-sm shadow-black/5 mb-3">
+      <div class="flex items-center justify-between mb-3 px-1">
+        <button onclick="window.__calendarNav(-1)" class="w-9 h-9 rounded-xl bg-navy flex items-center justify-center text-gold active:scale-90 transition-transform">
+          <i class="fa-solid fa-chevron-left"></i>
+        </button>
+        <div class="flex items-center gap-2">
+          <p class="text-sm font-semibold text-gold">${THAI_MONTHS_FULL[month]} ${year + 543}</p>
+          <button onclick="window.__calendarToday()" class="text-sm text-gray-500 underline">วันนี้</button>
+        </div>
+        <button onclick="window.__calendarNav(1)" class="w-9 h-9 rounded-xl bg-navy flex items-center justify-center text-gold active:scale-90 transition-transform">
+          <i class="fa-solid fa-chevron-right"></i>
+        </button>
+      </div>
+      <div class="grid grid-cols-7 gap-1 mb-1">
+        ${THAI_WEEKDAYS.map(w => `<div class="text-center text-sm text-gray-500 font-medium py-1">${w}</div>`).join('')}
+      </div>
+      <div class="grid grid-cols-7 gap-1">
+        ${cells}
+      </div>
+    </div>
+    <div id="calendar-day-detail"></div>
+  `;
+
+  // ถ้าวันนี้มีงาน ให้เปิดรายละเอียดวันนี้ให้อัตโนมัติเมื่อเข้ามาหน้าปฏิทินครั้งแรก
+  const todayKey = `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
+  if (year === today.getFullYear() && month === today.getMonth() && byDate[todayKey]) {
+    window.__showCalendarDayDetail(year, month, today.getDate());
+  }
 }
 
-function updateEquipmentQty(name, qty) {
-  const item = __bookingFormState.equipment.find(e => e.name === name);
-  if (item) item.qty = Number(qty);
+function calendarCell(day, dayBookings, isToday, year, month) {
+  const has = dayBookings.length > 0;
+  const firstName = has ? (dayBookings[0].customerName || '').split(' ')[0] : '';
+
+  return `
+    <button onclick="window.__showCalendarDayDetail(${year}, ${month}, ${day})"
+      class="relative aspect-square rounded-xl flex flex-col items-center justify-start pt-1.5 gap-0.5 transition-colors
+        ${isToday ? 'ring-2 ring-gold' : ''}
+        ${has ? 'bg-gold/10' : 'bg-navy hover:bg-navy-light'}">
+      ${has ? `<span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-gold pulse-dot"></span>` : ''}
+      <span class="text-sm font-medium ${isToday ? 'text-gold font-bold' : 'text-gray-300'}">${day}</span>
+      ${has ? `<span class="text-[10px] text-gold/90 leading-tight truncate w-full px-1">${firstName}</span>` : ''}
+      ${dayBookings.length > 1 ? `<span class="text-[9px] text-gray-500 leading-none">+${dayBookings.length - 1}</span>` : ''}
+    </button>
+  `;
 }
 
-function applyTemplateByIndex(index) {
-  const template = __bookingFormTemplates[index];
-  if (!template) return;
-  __bookingFormState.jobType = template.jobType;
-  __bookingFormState.equipment = (template.equipmentPreset || []).map(name => ({ name, qty: 1 }));
-  paintBookingForm(__equipmentCache, __bookingFormTemplates);
-  Utils.toast('success', `ใช้เทมเพลต "${template.name}" แล้ว`);
-}
+window.__calendarNav = (delta) => {
+  __calendarCursor = new Date(__calendarCursor.getFullYear(), __calendarCursor.getMonth() + delta, 1);
+  const detailEl = document.getElementById('calendar-day-detail');
+  if (detailEl) detailEl.innerHTML = '';
+  paintCalendarView();
+};
 
-// บันทึก/อัปเดตลูกค้าอัตโนมัติจากข้อมูลในฟอร์มจองงาน
-// - ถ้าพบลูกค้าเดิม (จากเบอร์โทร หรือชื่อที่ตรงกัน) จะอัปเดตข้อมูลที่เปลี่ยนไป
-// - ถ้าไม่พบ จะสร้างลูกค้าใหม่ในหน้าลูกค้าให้อัตโนมัติ
-async function resolveCustomerRecord() {
-  const s = __bookingFormState;
-  if (!s.customerName) return '';
+window.__calendarToday = () => {
+  __calendarCursor = new Date();
+  paintCalendarView();
+};
 
-  let existing = null;
-  if (s.customerId) {
-    existing = __bookingFormCustomers.find(c => c.id === s.customerId);
-  }
-  if (!existing && s.phone) {
-    existing = __bookingFormCustomers.find(c => c.phone && String(c.phone).trim() === String(s.phone).trim());
-  }
-  if (!existing) {
-    existing = __bookingFormCustomers.find(c => c.name && c.name.trim() === s.customerName.trim());
-  }
-
-  if (existing) {
-    const updates = {};
-    if (s.customerName && s.customerName.trim() !== (existing.name || '').trim()) updates.name = s.customerName.trim();
-    if (s.phone && s.phone !== existing.phone) updates.phone = s.phone;
-    if (s.line && s.line !== existing.line) updates.line = s.line;
-    if (Object.keys(updates).length) {
-      await BawmusicAPI.updateCustomer(existing.id, updates);
-    }
-    return existing.id;
-  }
-
-  const created = await BawmusicAPI.createCustomer({
-    name: s.customerName.trim(),
-    phone: s.phone || '',
-    line: s.line || ''
+window.__showCalendarDayDetail = (year, month, day) => {
+  const dayBookings = __bookingsCache.filter(b => {
+    if (!b.date) return false;
+    const d = new Date(b.date);
+    return d.getFullYear() === year && d.getMonth() === month && d.getDate() === day;
   });
-  return created.id;
-}
 
-function closeBookingForm() {
-  document.getElementById('modal-root').innerHTML = '';
-  __bookingFormState = null;
-}
+  const detailEl = document.getElementById('calendar-day-detail');
+  if (!detailEl) return;
 
-async function submitBookingForm() {
-  const s = __bookingFormState;
-  if (!s.customerName || !s.date) {
-    Utils.toast('error', 'กรุณากรอกชื่อลูกค้าและวันที่');
+  const dateObj = new Date(year, month, day);
+
+  if (dayBookings.length === 0) {
+    detailEl.innerHTML = `
+      <div class="bg-navy-light rounded-2xl p-4 border border-gold/10 text-center">
+        <p class="text-sm text-gray-400 mb-3">${Utils.formatDate(dateObj)} — ยังไม่มีงาน</p>
+        <button onclick="window.__newBookingOnDate(${year}, ${month}, ${day})"
+          class="bg-gold/10 border border-gold/30 text-gold text-sm font-medium rounded-xl px-4 py-2">
+          <i class="fa-solid fa-plus mr-1.5"></i>จองงานวันนี้
+        </button>
+      </div>
+    `;
     return;
   }
 
-  Utils.loading('กำลังตรวจสอบคิว...');
-  try {
-    const conflicts = await BawmusicAPI.checkConflicts({ id: s.id, date: s.date, equipment: s.equipment });
+  detailEl.innerHTML = `
+    <p class="text-sm text-gray-500 mb-2 px-1">${Utils.formatDate(dateObj)} — ${dayBookings.length} งาน</p>
+    <div class="space-y-2">${dayBookings.map(bookingRow).join('')}</div>
+  `;
+};
 
-    if (conflicts.hasConflict) {
-      Utils.closeLoading();
-      let msg = '';
-      if (conflicts.dateConflict) {
-        msg += `<p style="margin-bottom:8px;">⚠️ มีงานอื่นในวันเดียวกัน: ${conflicts.conflictingBookings.map(b => b.customerName).join(', ')}</p>`;
-      }
-      if (conflicts.equipmentConflicts.length) {
-        msg += conflicts.equipmentConflicts.map(c => `<p style="margin-bottom:4px;">🔧 ${c.name}: ต้องการ ${c.requested} แต่มี ${c.available} (จองแล้ว ${c.alreadyBooked})</p>`).join('');
-      }
-      const proceed = await Swal.fire({
-        title: 'พบความขัดแย้ง!', html: msg, icon: 'warning',
-        showCancelButton: true, confirmButtonText: 'บันทึกต่อไป', cancelButtonText: 'แก้ไข',
-        confirmButtonColor: '#d4af37', background: Utils.swalBg(), color: Utils.swalColor()
-      });
-      if (!proceed.isConfirmed) return;
-      Utils.loading('กำลังบันทึก...');
-    }
+window.__newBookingOnDate = (year, month, day) => {
+  const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  window.openBookingForm(null, dateStr);
+};
 
-    Utils.loading('กำลังบันทึกข้อมูลลูกค้า...');
-    try {
-      s.customerId = await resolveCustomerRecord();
-    } catch (custErr) {
-      console.error('resolveCustomerRecord failed:', custErr);
-      // ไม่ block การบันทึกการจอง แม้บันทึกลูกค้าไม่สำเร็จ
-    }
+// ================== LIST VIEW ==================
 
-    Utils.loading('กำลังบันทึก...');
-    if (s.id) {
-      await BawmusicAPI.updateBooking(s.id, s);
-    } else {
-      await BawmusicAPI.createBooking(s);
-    }
+function paintBookingsListView() {
+  const el = document.getElementById('bookings-view-content');
+  if (!el) return;
 
-    Utils.closeLoading();
-    Utils.toast('success', 'บันทึกการจองสำเร็จ');
-    closeBookingForm();
-    if (window.__app.currentView === 'dashboard') renderDashboard();
-    if (window.__app.currentView === 'bookings') renderBookings();
+  let list = __bookingsCache.filter(b => {
+    if (__bookingsFilter.status && b.status !== __bookingsFilter.status) return false;
+    if (__bookingsFilter.jobType && b.jobType !== __bookingsFilter.jobType) return false;
+    return true;
+  });
 
-  } catch (err) {
-    Utils.closeLoading();
-    Utils.toast('error', 'เกิดข้อผิดพลาด: ' + err.message);
-  }
+  el.innerHTML = `
+    <div class="mb-3 flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+      ${filterChip('ทั้งหมด', '', 'status')}
+      ${filterChip('ยืนยันแล้ว', 'confirmed', 'status')}
+      ${filterChip('รอยืนยัน', 'pending', 'status')}
+      ${filterChip('เสร็จสิ้น', 'completed', 'status')}
+    </div>
+    <p class="text-sm text-gray-500 mb-2">${list.length} รายการ</p>
+    <div class="space-y-2">
+      ${list.length === 0 ? emptyState('ไม่พบรายการจอง', 'fa-calendar-xmark') :
+        list.map(bookingRow).join('')}
+    </div>
+  `;
 }
 
-async function deleteBookingConfirm(id) {
-  const ok = await Utils.confirm('ลบการจองนี้?', 'การกระทำนี้ไม่สามารถย้อนกลับได้', 'ลบ');
-  if (!ok) return;
-  Utils.loading('กำลังลบ...');
-  try {
-    await BawmusicAPI.deleteBooking(id);
-    Utils.closeLoading();
-    Utils.toast('success', 'ลบสำเร็จ');
-    closeBookingForm();
-    if (window.__app.currentView === 'dashboard') renderDashboard();
-    if (window.__app.currentView === 'bookings') renderBookings();
-  } catch (err) {
-    Utils.closeLoading();
-    Utils.toast('error', 'เกิดข้อผิดพลาด');
-  }
+function filterChip(label, value, key) {
+  const active = __bookingsFilter[key] === value;
+  return `
+    <button onclick="window.__setBookingFilter('${key}','${value}')"
+      class="px-3 py-2 rounded-full text-sm font-medium whitespace-nowrap flex-shrink-0 transition-colors ${active ? 'bg-gold text-navy-dark' : 'bg-navy-light text-gray-400'}">
+      ${label}
+    </button>
+  `;
+}
+
+window.__setBookingFilter = (key, value) => {
+  __bookingsFilter[key] = value;
+  paintBookingsListView();
+};
+
+function bookingRow(b) {
+  return `
+    <div class="bg-navy-light rounded-2xl p-3.5 border border-gold/10 shadow-sm shadow-black/5 active:scale-[0.98] transition-transform cursor-pointer"
+         onclick="window.openBookingForm('${b.id}')">
+      <div class="flex items-start justify-between mb-1.5">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid ${Utils.jobTypeIcon(b.jobType)} text-gold text-sm"></i>
+          <span class="text-sm font-medium text-gray-100">${b.customerName}</span>
+        </div>
+        ${Utils.statusBadge(b.status)}
+      </div>
+      <p class="text-sm text-gray-400 mb-1"><i class="fa-solid fa-location-dot mr-1 w-3"></i>${b.venue || 'ไม่ระบุสถานที่'} ${b.province ? '· ' + b.province : ''}</p>
+      <div class="flex items-center justify-between mt-2 text-sm">
+        <span class="text-gray-400"><i class="fa-regular fa-calendar mr-1 w-3"></i>${Utils.formatDate(b.date)}</span>
+        <span class="text-gold font-medium">${Utils.formatMoney(b.price)}</span>
+      </div>
+    </div>
+  `;
 }
