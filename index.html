@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Bawmusic — Band Booking OS</title>
+<meta name="theme-color" content="#1a1a2e">
+<meta name="description" content="ระบบจัดการการจองงานวงดนตรีครบวงจร">
+
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Bawmusic">
+
+<script>
+  // ตั้งค่าธีมก่อนวาดหน้าจอ เพื่อไม่ให้กระพริบ
+  (function () {
+    var saved = localStorage.getItem('bawmusic_theme_override');
+    var theme;
+    if (saved === 'light' || saved === 'dark') {
+      theme = saved;
+    } else {
+      var hour = new Date().getHours();
+      theme = (hour >= 6 && hour < 18) ? 'light' : 'dark';
+    }
+    document.documentElement.setAttribute('data-theme', theme);
+    document.addEventListener('DOMContentLoaded', function () {
+      var meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute('content', theme === 'light' ? '#f5f2e8' : '#1a1a2e');
+    });
+  })();
+</script>
+
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<link rel="stylesheet" href="css/style.css">
+
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: { kanit: ['Kanit', 'sans-serif'], prompt: ['Prompt', 'sans-serif'] },
+        colors: {
+          navy: { DEFAULT: '#1a1a2e', dark: '#0f0f1e', light: '#25253f' },
+          gold: { DEFAULT: '#d4af37', light: '#e8c766', dark: '#a8862a' }
+        }
+      }
+    }
+  }
+</script>
+</head>
+<body class="font-kanit bg-navy-dark text-gray-100 min-h-screen pb-24" x-data="app()" x-init="init()">
+
+<!-- ===== TOP BAR ===== -->
+<header class="sticky top-0 z-40 bg-navy/95 backdrop-blur border-b border-gold/20 px-4 py-3 flex items-center justify-between">
+  <div class="flex items-center gap-2">
+    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-gold to-gold-dark flex items-center justify-center">
+      <i class="fa-solid fa-music text-navy-dark text-sm"></i>
+    </div>
+    <div>
+      <h1 class="text-sm font-semibold text-gold leading-none" x-text="settings.bandName || 'Bawmusic'"></h1>
+      <p class="text-sm text-gray-400 leading-none mt-0.5" x-text="viewTitles[currentView]"></p>
+    </div>
+  </div>
+  <div class="flex items-center gap-2">
+    <button x-show="!isStandalone()" @click="installApp()" class="w-10 h-10 rounded-full bg-navy-light flex items-center justify-center text-gold">
+      <i class="fa-solid fa-arrow-down-to-bracket"></i>
+    </button>
+    <button @click="toggleDarkMode()" class="w-10 h-10 rounded-full bg-navy-light flex items-center justify-center text-gold">
+      <i class="fa-solid" :class="darkMode ? 'fa-moon' : 'fa-sun'"></i>
+    </button>
+  </div>
+</header>
+
+<!-- ===== MAIN CONTENT ===== -->
+<main class="px-4 py-4 max-w-2xl mx-auto">
+
+  <!-- Loading Skeleton -->
+  <template x-if="loading">
+    <div class="space-y-3 animate-pulse">
+      <div class="h-24 bg-navy-light rounded-2xl"></div>
+      <div class="h-24 bg-navy-light rounded-2xl"></div>
+      <div class="h-24 bg-navy-light rounded-2xl"></div>
+    </div>
+  </template>
+
+  <div x-show="!loading" x-cloak>
+    <div x-show="currentView === 'dashboard'" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-2" x-transition:enter-end="opacity-100 translate-y-0">
+      <div id="view-dashboard"></div>
+    </div>
+    <div x-show="currentView === 'bookings'" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-2" x-transition:enter-end="opacity-100 translate-y-0">
+      <div id="view-bookings"></div>
+    </div>
+    <div x-show="currentView === 'customers'" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-2" x-transition:enter-end="opacity-100 translate-y-0">
+      <div id="view-customers"></div>
+    </div>
+    <div x-show="currentView === 'equipment'" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-2" x-transition:enter-end="opacity-100 translate-y-0">
+      <div id="view-equipment"></div>
+    </div>
+    <div x-show="currentView === 'analytics'" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-2" x-transition:enter-end="opacity-100 translate-y-0">
+      <div id="view-analytics"></div>
+    </div>
+    <div x-show="currentView === 'settings'" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-2" x-transition:enter-end="opacity-100 translate-y-0">
+      <div id="view-settings"></div>
+    </div>
+  </div>
+</main>
+
+<!-- ===== INSTALL APP BANNER ===== -->
+<div x-show="showInstallBanner" x-cloak x-transition
+  class="fixed bottom-40 left-3 right-3 z-40 max-w-2xl mx-auto bg-gradient-to-r from-gold to-gold-dark rounded-2xl p-3.5 shadow-lg shadow-gold/30 flex items-center gap-3">
+  <div class="w-10 h-10 rounded-xl bg-navy-dark flex items-center justify-center flex-shrink-0">
+    <i class="fa-solid fa-music text-gold"></i>
+  </div>
+  <div class="flex-1 min-w-0">
+    <p class="text-sm font-semibold text-navy-dark leading-tight">ติดตั้ง Bawmusic ลงหน้าจอหลัก</p>
+    <p class="text-xs text-navy-dark/80 leading-tight mt-0.5">
+      <template x-if="env.isInAppBrowser"><span x-text="'เปิดใน ' + env.inAppName + ' — แตะ ⋮ แล้วเลือก เปิดในเบราว์เซอร์'"></span></template>
+      <template x-if="!env.isInAppBrowser && env.isIOS"><span>แตะปุ่มแชร์ แล้วเลือก เพิ่มไปยังหน้าจอโฮม</span></template>
+      <template x-if="!env.isInAppBrowser && !env.isIOS"><span>ใช้งานได้เหมือนแอปจริง แม้ออฟไลน์</span></template>
+    </p>
+  </div>
+  <button @click="installApp()" class="bg-navy-dark text-gold text-xs font-semibold px-3 py-2 rounded-xl flex-shrink-0">ติดตั้ง</button>
+  <button @click="dismissInstallBanner()" class="text-navy-dark/60 px-1 flex-shrink-0"><i class="fa-solid fa-xmark"></i></button>
+</div>
+
+<!-- ===== FLOATING ACTION BUTTON ===== -->
+<button x-show="['dashboard','bookings'].includes(currentView)" @click="window.openBookingForm()"
+  class="fixed bottom-24 right-5 z-40 w-14 h-14 rounded-full bg-gradient-to-br from-gold to-gold-dark shadow-lg shadow-gold/30 flex items-center justify-center text-navy-dark text-xl active:scale-90 transition-transform">
+  <i class="fa-solid fa-plus"></i>
+</button>
+
+<!-- ===== BOTTOM NAVIGATION ===== -->
+<nav class="fixed bottom-0 left-0 right-0 z-40 bg-navy/95 backdrop-blur border-t border-gold/20 px-2 py-2 pb-safe">
+  <div class="max-w-2xl mx-auto grid grid-cols-5 gap-1">
+    <template x-for="item in navItems" :key="item.view">
+      <button @click="setView(item.view)" class="flex flex-col items-center gap-1 py-2 rounded-xl transition-colors"
+        :class="currentView === item.view ? 'text-gold' : 'text-gray-500'">
+        <i class="fa-solid text-lg" :class="item.icon"></i>
+        <span class="text-sm font-medium" x-text="item.label"></span>
+      </button>
+    </template>
+  </div>
+</nav>
+
+<!-- ===== MODAL CONTAINER (booking form, etc.) ===== -->
+<div id="modal-root"></div>
+
+<!-- Toast container handled by SweetAlert2 -->
+
+<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+<script src="js/api.js"></script>
+<script src="js/utils.js"></script>
+<script>
+  // ดักจับ error ที่ไม่ถูกจัดการทั้งหมด แสดงผลให้เห็นแทนหน้าจอขาวเงียบๆ
+  window.addEventListener('error', function (e) {
+    console.error('Bawmusic error:', e.error || e.message);
+    if (window.Utils && window.Swal) {
+      Utils.toast('error', 'เกิดข้อผิดพลาด: ' + (e.message || 'unknown error'));
+    }
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    console.error('Bawmusic unhandled promise rejection:', e.reason);
+    if (window.Utils && window.Swal) {
+      Utils.toast('error', 'เกิดข้อผิดพลาด: ' + (e.reason?.message || e.reason || 'unknown error'));
+    }
+  });
+</script>
+<script src="js/views/dashboard.js"></script>
+<script src="js/views/bookings.js"></script>
+<script src="js/views/customers.js"></script>
+<script src="js/views/equipment.js"></script>
+<script src="js/views/analytics.js"></script>
+<script src="js/views/settings.js"></script>
+<script src="js/views/bookingForm.js"></script>
+<script src="js/views/jobSummary.js"></script>
+<script src="js/app.js"></script>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('service-worker.js').catch(function (e) { console.warn('SW registration failed', e); });
+    });
+  }
+</script>
+</body>
+</html>
