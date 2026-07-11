@@ -56,24 +56,24 @@
   }
 </script>
 </head>
-<body class="font-kanit bg-navy-dark text-gray-100 min-h-screen pb-24" x-data="app()" x-init="init()">
+<body class="font-kanit bg-navy-dark text-gray-100 min-h-screen pb-28" x-data="app()" x-init="init()">
 
 <!-- ===== TOP BAR ===== -->
-<header class="sticky top-0 z-40 bg-navy/95 backdrop-blur border-b border-gold/20 px-4 py-3 flex items-center justify-between">
-  <div class="flex items-center gap-2">
-    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-gold to-gold-dark flex items-center justify-center">
+<header class="sticky top-0 z-40 bg-navy/90 backdrop-blur-lg border-b border-gold/10 px-4 py-3 flex items-center justify-between shadow-sm">
+  <div class="flex items-center gap-2.5">
+    <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-gold to-gold-dark flex items-center justify-center shadow-md shadow-gold/20">
       <i class="fa-solid fa-music text-navy-dark text-sm"></i>
     </div>
     <div>
-      <h1 class="text-sm font-semibold text-gold leading-none" x-text="settings.bandName || 'Bawmusic'"></h1>
-      <p class="text-sm text-gray-400 leading-none mt-0.5" x-text="viewTitles[currentView]"></p>
+      <h1 class="text-sm font-bold text-gold leading-none tracking-wide" x-text="settings.bandName || 'Bawmusic'"></h1>
+      <p class="text-sm text-gray-400 leading-none mt-1" x-text="viewTitles[currentView]"></p>
     </div>
   </div>
   <div class="flex items-center gap-2">
-    <button x-show="!isStandalone()" @click="installApp()" class="w-10 h-10 rounded-full bg-navy-light flex items-center justify-center text-gold">
+    <button x-show="!isStandalone()" @click="installApp()" class="w-10 h-10 rounded-2xl bg-navy-light/80 flex items-center justify-center text-gold active:scale-90 transition-transform">
       <i class="fa-solid fa-arrow-down-to-bracket"></i>
     </button>
-    <button @click="toggleDarkMode()" class="w-10 h-10 rounded-full bg-navy-light flex items-center justify-center text-gold">
+    <button @click="toggleDarkMode()" class="w-10 h-10 rounded-2xl bg-navy-light/80 flex items-center justify-center text-gold active:scale-90 transition-transform">
       <i class="fa-solid" :class="darkMode ? 'fa-moon' : 'fa-sun'"></i>
     </button>
   </div>
@@ -133,16 +133,16 @@
 
 <!-- ===== FLOATING ACTION BUTTON ===== -->
 <button x-show="['dashboard','bookings'].includes(currentView)" @click="window.openBookingForm()"
-  class="fixed bottom-24 right-5 z-40 w-14 h-14 rounded-full bg-gradient-to-br from-gold to-gold-dark shadow-lg shadow-gold/30 flex items-center justify-center text-navy-dark text-xl active:scale-90 transition-transform">
+  class="fixed bottom-28 right-5 z-40 w-14 h-14 rounded-full bg-gradient-to-br from-gold to-gold-dark shadow-lg shadow-gold/30 flex items-center justify-center text-navy-dark text-xl active:scale-90 transition-transform">
   <i class="fa-solid fa-plus"></i>
 </button>
 
 <!-- ===== BOTTOM NAVIGATION ===== -->
-<nav class="fixed bottom-0 left-0 right-0 z-40 bg-navy/95 backdrop-blur border-t border-gold/20 px-2 py-2 pb-safe">
-  <div class="max-w-2xl mx-auto grid grid-cols-5 gap-1">
+<nav class="fixed bottom-3 left-3 right-3 z-40 pb-safe">
+  <div class="max-w-2xl mx-auto grid grid-cols-5 gap-1 bg-navy/90 backdrop-blur-lg border border-gold/10 rounded-3xl px-2 py-2 shadow-xl shadow-black/20">
     <template x-for="item in navItems" :key="item.view">
-      <button @click="setView(item.view)" class="flex flex-col items-center gap-1 py-2 rounded-xl transition-colors"
-        :class="currentView === item.view ? 'text-gold' : 'text-gray-500'">
+      <button @click="setView(item.view)" class="relative flex flex-col items-center gap-1 py-2 rounded-2xl transition-all duration-200"
+        :class="currentView === item.view ? 'text-gold bg-gold/10' : 'text-gray-500'">
         <i class="fa-solid text-lg" :class="item.icon"></i>
         <span class="text-sm font-medium" x-text="item.label"></span>
       </button>
