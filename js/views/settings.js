@@ -14,6 +14,8 @@ async function renderSettings() {
         <h3 class="text-sm font-semibold text-gold mb-3"><i class="fa-solid fa-music mr-1.5"></i>ข้อมูลวงดนตรี</h3>
         <div class="space-y-3">
           ${settingField('bandName', 'ชื่อวง', settings.bandName)}
+          ${settingField('bannerImage', 'URL รูปแบนเนอร์หัวแอป', settings.bannerImage)}
+          ${settings.bannerImage ? `<img src="${settings.bannerImage}" class="w-full h-24 object-cover rounded-xl border border-gold/10 shadow-sm shadow-black/5" onerror="this.style.display='none'">` : ''}
           ${settingField('phone', 'เบอร์โทร', settings.phone)}
           ${settingField('line', 'LINE ID', settings.line)}
           ${settingField('facebook', 'Facebook', settings.facebook)}
@@ -89,6 +91,7 @@ window.__setManualTheme = (theme) => {
 window.__saveSettings = async () => {
   const data = {
     bandName: document.getElementById('setting-bandName').value,
+    bannerImage: document.getElementById('setting-bannerImage').value,
     phone: document.getElementById('setting-phone').value,
     line: document.getElementById('setting-line').value,
     facebook: document.getElementById('setting-facebook').value
