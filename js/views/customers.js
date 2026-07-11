@@ -46,7 +46,7 @@ window.__searchCustomers = (query) => {
 
 function customerRow(c) {
   return `
-    <div class="bg-navy-light rounded-2xl p-3.5 border border-gold/10">
+    <div class="bg-navy-light rounded-2xl p-3.5 border border-gold/10 shadow-sm shadow-black/5">
       <div class="flex items-center justify-between mb-2">
         <div class="flex items-center gap-2.5">
           <div class="w-10 h-10 rounded-full bg-gold/20 flex items-center justify-center text-gold text-sm font-semibold">
