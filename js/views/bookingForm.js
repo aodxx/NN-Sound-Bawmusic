@@ -88,7 +88,7 @@ function paintBookingForm(equipment, templates) {
       </div>
 
       <!-- Customer Info -->
-      <section class="bg-navy-light rounded-2xl p-4 border border-gold/10">
+      <section class="bg-navy-light rounded-2xl p-4 border border-gold/10 shadow-sm shadow-black/5">
         <h3 class="text-sm font-semibold text-gold mb-3"><i class="fa-solid fa-user mr-1.5"></i>ข้อมูลลูกค้า</h3>
         <div class="space-y-2.5">
           ${formInput('customerName', 'ชื่อลูกค้า', s.customerName, 'text')}
@@ -100,7 +100,7 @@ function paintBookingForm(equipment, templates) {
       </section>
 
       <!-- Venue -->
-      <section class="bg-navy-light rounded-2xl p-4 border border-gold/10">
+      <section class="bg-navy-light rounded-2xl p-4 border border-gold/10 shadow-sm shadow-black/5">
         <h3 class="text-sm font-semibold text-gold mb-3"><i class="fa-solid fa-location-dot mr-1.5"></i>สถานที่จัดงาน</h3>
         <div class="space-y-2.5">
           ${formInput('venue', 'ชื่อสถานที่', s.venue, 'text')}
@@ -110,7 +110,7 @@ function paintBookingForm(equipment, templates) {
       </section>
 
       <!-- Date & Time -->
-      <section class="bg-navy-light rounded-2xl p-4 border border-gold/10">
+      <section class="bg-navy-light rounded-2xl p-4 border border-gold/10 shadow-sm shadow-black/5">
         <h3 class="text-sm font-semibold text-gold mb-3"><i class="fa-regular fa-calendar mr-1.5"></i>วันและเวลา</h3>
         <div class="space-y-2.5">
           ${formInput('date', 'วันที่จัดงาน', s.date, 'date')}
@@ -123,7 +123,7 @@ function paintBookingForm(equipment, templates) {
       </section>
 
       <!-- Job Type -->
-      <section class="bg-navy-light rounded-2xl p-4 border border-gold/10">
+      <section class="bg-navy-light rounded-2xl p-4 border border-gold/10 shadow-sm shadow-black/5">
         <h3 class="text-sm font-semibold text-gold mb-3"><i class="fa-solid fa-tag mr-1.5"></i>ประเภทงาน</h3>
         <div class="grid grid-cols-4 gap-2">
           ${JOB_TYPES.map(jt => `
@@ -137,7 +137,7 @@ function paintBookingForm(equipment, templates) {
       </section>
 
       <!-- Pricing -->
-      <section class="bg-navy-light rounded-2xl p-4 border border-gold/10">
+      <section class="bg-navy-light rounded-2xl p-4 border border-gold/10 shadow-sm shadow-black/5">
         <h3 class="text-sm font-semibold text-gold mb-3"><i class="fa-solid fa-money-bill-wave mr-1.5"></i>ราคาและมัดจำ</h3>
         <div class="space-y-2.5">
           ${formInput('package', 'แพ็คเกจ', s.package, 'text')}
@@ -150,7 +150,7 @@ function paintBookingForm(equipment, templates) {
       </section>
 
       <!-- Equipment -->
-      <section class="bg-navy-light rounded-2xl p-4 border border-gold/10">
+      <section class="bg-navy-light rounded-2xl p-4 border border-gold/10 shadow-sm shadow-black/5">
         <h3 class="text-sm font-semibold text-gold mb-3"><i class="fa-solid fa-boxes-stacked mr-1.5"></i>เลือกอุปกรณ์</h3>
         <div class="space-y-3">
           ${Object.keys(categorized).map(cat => `
@@ -165,7 +165,7 @@ function paintBookingForm(equipment, templates) {
       </section>
 
       <!-- Remarks -->
-      <section class="bg-navy-light rounded-2xl p-4 border border-gold/10">
+      <section class="bg-navy-light rounded-2xl p-4 border border-gold/10 shadow-sm shadow-black/5">
         <h3 class="text-sm font-semibold text-gold mb-3"><i class="fa-solid fa-note-sticky mr-1.5"></i>หมายเหตุ</h3>
         <textarea id="field-remarks" oninput="updateField('remarks', this.value)"
           class="w-full bg-navy border border-gold/10 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-gold/40" rows="2">${s.remarks}</textarea>
