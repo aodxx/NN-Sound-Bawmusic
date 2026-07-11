@@ -12,14 +12,37 @@ async function renderDashboard() {
   try {
     const data = await BawmusicAPI.getDashboard();
 
+    const bannerUrl = (window.__app && window.__app.settings && window.__app.settings.bannerImage) || '';
+    const bandName = (window.__app && window.__app.settings && window.__app.settings.bandName) || 'Bawmusic';
+
     container.innerHTML = `
+      <!-- Hero Banner -->
+      <div class="relative w-full h-36 rounded-3xl overflow-hidden mb-4 shadow-lg shadow-black/20 border border-gold/10 shadow-sm shadow-black/5">
+        ${bannerUrl ? `
+          <img src="${bannerUrl}" alt="banner" class="absolute inset-0 w-full h-full object-cover"
+               onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+          <div style="display:none" class="hero-fallback absolute inset-0 w-full h-full items-center justify-center bg-gradient-to-br from-navy-light to-navy-dark">
+            <i class="fa-solid fa-image-slash text-2xl text-gray-600"></i>
+          </div>
+        ` : `
+          <div class="absolute inset-0 w-full h-full flex items-center justify-center bg-gradient-to-br from-navy-light via-navy to-navy-dark">
+            <i class="fa-solid fa-music text-4xl text-gold/20"></i>
+          </div>
+        `}
+        <div class="absolute inset-0 bg-gradient-to-t from-navy-dark via-navy-dark/30 to-transparent"></div>
+        <div class="absolute bottom-0 left-0 right-0 p-4">
+          <p class="text-white text-lg font-bold leading-tight drop-shadow-md">${bandName}</p>
+          <p class="text-gold text-sm font-medium drop-shadow-md">ระบบจัดการการจองงานวงดนตรี</p>
+        </div>
+      </div>
+
       <!-- Quick Stats -->
       <div class="grid grid-cols-2 gap-3 mb-4">
         <div class="bg-gradient-to-br from-gold to-gold-dark rounded-2xl p-4 text-navy-dark">
           <p class="text-sm font-medium opacity-80">รายได้เดือนนี้</p>
           <p class="text-xl font-bold mt-1">${Utils.formatMoney(data.monthlyIncome)}</p>
         </div>
-        <div class="bg-navy-light rounded-2xl p-4 border border-gold/10">
+        <div class="bg-navy-light rounded-2xl p-4 border border-gold/10 shadow-sm shadow-black/5">
           <p class="text-sm font-medium text-gray-400">งานเดือนนี้</p>
           <p class="text-xl font-bold mt-1 text-gold">${data.thisMonthCount} งาน</p>
         </div>
