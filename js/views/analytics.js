@@ -19,7 +19,7 @@ async function renderAnalytics() {
           <p class="text-sm font-medium opacity-80">รายได้ปี ${year + 543}</p>
           <p class="text-lg font-bold mt-1">${Utils.formatMoney(data.yearlyRevenue)}</p>
         </div>
-        <div class="bg-navy-light rounded-2xl p-4 border border-gold/10">
+        <div class="bg-navy-light rounded-2xl p-4 border border-gold/10 shadow-sm shadow-black/5">
           <p class="text-sm font-medium text-gray-400">งานทั้งปี</p>
           <p class="text-lg font-bold mt-1 text-gold">${data.yearlyJobs} งาน</p>
         </div>
