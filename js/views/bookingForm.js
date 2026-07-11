@@ -1,0 +1,334 @@
+/**
+ * BAWMUSIC — Booking Form (Module 2: Core)
+ * Full-screen modal for creating/editing bookings with equipment checklist
+ */
+
+const JOB_TYPES = [
+  { value: 'Wedding', label: 'งานแต่งงาน', icon: 'fa-rings-wedding' },
+  { value: 'Ordination', label: 'งานบวช', icon: 'fa-om' },
+  { value: 'Funeral', label: 'งานศพ', icon: 'fa-fire-flame-simple' },
+  { value: 'Corporate', label: 'งานองค์กร', icon: 'fa-briefcase' },
+  { value: 'Birthday', label: 'งานวันเกิด', icon: 'fa-cake-candles' },
+  { value: 'Concert', label: 'คอนเสิร์ต', icon: 'fa-guitar' },
+  { value: 'Custom', label: 'อื่นๆ', icon: 'fa-star' }
+];
+
+let __bookingFormState = null;
+let __bookingFormTemplates = [];
+
+async function openBookingForm(id) {
+  Utils.loading('กำลังเตรียมฟอร์ม...');
+
+  try {
+    const [equipment, templates, existing] = await Promise.all([
+      __equipmentCache.length ? Promise.resolve(__equipmentCache) : BawmusicAPI.listEquipment(),
+      BawmusicAPI.listTemplates(),
+      id ? BawmusicAPI.getBooking(id) : Promise.resolve(null)
+    ]);
+    __equipmentCache = equipment;
+    __bookingFormTemplates = templates || [];
+
+    __bookingFormState = {
+      id: existing?.id || null,
+      customerId: existing?.customerId || '',
+      customerName: existing?.customerName || '',
+      phone: existing?.phone || '',
+      line: existing?.line || '',
+      venue: existing?.venue || '',
+      mapLink: existing?.mapLink || '',
+      province: existing?.province || '',
+      date: existing?.date ? new Date(existing.date).toISOString().slice(0, 10) : '',
+      startTime: existing?.startTime || '',
+      endTime: existing?.endTime || '',
+      jobType: existing?.jobType || 'Wedding',
+      package: existing?.package || '',
+      price: existing?.price || '',
+      deposit: existing?.deposit || '',
+      remarks: existing?.remarks || '',
+      status: existing?.status || 'confirmed',
+      equipment: existing?.equipment || [] // [{name, qty}]
+    };
+
+    Utils.closeLoading();
+    paintBookingForm(equipment, templates);
+  } catch (err) {
+    Utils.closeLoading();
+    Utils.toast('error', 'โหลดฟอร์มไม่สำเร็จ: ' + err.message);
+  }
+}
+
+function paintBookingForm(equipment, templates) {
+  const root = document.getElementById('modal-root');
+  const s = __bookingFormState;
+
+  const categorized = {};
+  equipment.forEach(e => {
+    categorized[e.category] = categorized[e.category] || [];
+    categorized[e.category].push(e);
+  });
+
+  root.innerHTML = `
+  <div class="fixed inset-0 z-50 bg-navy-dark overflow-y-auto" id="booking-modal">
+    <div class="sticky top-0 bg-navy-dark/95 backdrop-blur border-b border-gold/20 px-4 py-3 flex items-center justify-between z-10">
+      <button onclick="closeBookingForm()" class="text-gray-400"><i class="fa-solid fa-xmark text-lg"></i></button>
+      <h2 class="text-sm font-semibold text-gold">${s.id ? 'แก้ไขการจอง' : 'จองงานใหม่'}</h2>
+      <button onclick="submitBookingForm()" class="text-gold text-sm font-semibold">บันทึก</button>
+    </div>
+
+    <div class="px-4 py-4 max-w-2xl mx-auto space-y-4 pb-10">
+
+      <!-- Job Templates -->
+      <div class="flex gap-2 overflow-x-auto pb-1">
+        ${templates.map((t, i) => `
+          <button onclick="applyTemplateByIndex(${i})"
+            class="flex-shrink-0 px-3 py-2 bg-navy-light border border-gold/20 rounded-xl text-sm text-gray-200">
+            <i class="fa-solid fa-wand-magic-sparkles text-gold mr-1"></i>${t.name}
+          </button>
+        `).join('')}
+      </div>
+
+      <!-- Customer Info -->
+      <section class="bg-navy-light rounded-2xl p-4 border border-gold/10">
+        <h3 class="text-sm font-semibold text-gold mb-3"><i class="fa-solid fa-user mr-1.5"></i>ข้อมูลลูกค้า</h3>
+        <div class="space-y-2.5">
+          ${formInput('customerName', 'ชื่อลูกค้า', s.customerName, 'text')}
+          <div class="grid grid-cols-2 gap-2.5">
+            ${formInput('phone', 'เบอร์โทร', s.phone, 'tel')}
+            ${formInput('line', 'LINE ID', s.line, 'text')}
+          </div>
+        </div>
+      </section>
+
+      <!-- Venue -->
+      <section class="bg-navy-light rounded-2xl p-4 border border-gold/10">
+        <h3 class="text-sm font-semibold text-gold mb-3"><i class="fa-solid fa-location-dot mr-1.5"></i>สถานที่จัดงาน</h3>
+        <div class="space-y-2.5">
+          ${formInput('venue', 'ชื่อสถานที่', s.venue, 'text')}
+          ${formInput('mapLink', 'ลิงก์ Google Maps', s.mapLink, 'url')}
+          ${selectInput('province', 'จังหวัด', s.province, Utils.provinces.map(p => ({ value: p, label: p })))}
+        </div>
+      </section>
+
+      <!-- Date & Time -->
+      <section class="bg-navy-light rounded-2xl p-4 border border-gold/10">
+        <h3 class="text-sm font-semibold text-gold mb-3"><i class="fa-regular fa-calendar mr-1.5"></i>วันและเวลา</h3>
+        <div class="space-y-2.5">
+          ${formInput('date', 'วันที่จัดงาน', s.date, 'date')}
+          <div class="grid grid-cols-2 gap-2.5">
+            ${formInput('startTime', 'เวลาเริ่ม', s.startTime, 'time')}
+            ${formInput('endTime', 'เวลาสิ้นสุด', s.endTime, 'time')}
+          </div>
+        </div>
+        <div id="conflict-warning"></div>
+      </section>
+
+      <!-- Job Type -->
+      <section class="bg-navy-light rounded-2xl p-4 border border-gold/10">
+        <h3 class="text-sm font-semibold text-gold mb-3"><i class="fa-solid fa-tag mr-1.5"></i>ประเภทงาน</h3>
+        <div class="grid grid-cols-4 gap-2">
+          ${JOB_TYPES.map(jt => `
+            <button onclick="setJobType('${jt.value}')" id="jobtype-${jt.value}"
+              class="flex flex-col items-center gap-1 py-2.5 rounded-xl border transition-colors ${s.jobType === jt.value ? 'bg-gold/20 border-gold text-gold' : 'bg-navy border-gold/10 text-gray-400'}">
+              <i class="fa-solid ${jt.icon} text-sm"></i>
+              <span class="text-sm">${jt.label}</span>
+            </button>
+          `).join('')}
+        </div>
+      </section>
+
+      <!-- Pricing -->
+      <section class="bg-navy-light rounded-2xl p-4 border border-gold/10">
+        <h3 class="text-sm font-semibold text-gold mb-3"><i class="fa-solid fa-money-bill-wave mr-1.5"></i>ราคาและมัดจำ</h3>
+        <div class="space-y-2.5">
+          ${formInput('package', 'แพ็คเกจ', s.package, 'text')}
+          <div class="grid grid-cols-2 gap-2.5">
+            ${formInput('price', 'ราคาทั้งหมด (บาท)', s.price, 'number')}
+            ${formInput('deposit', 'มัดจำ (บาท)', s.deposit, 'number')}
+          </div>
+          <p class="text-sm text-gray-400">ยอดคงเหลือ: <span class="text-gold font-medium" id="remaining-display">${Utils.formatMoney((Number(s.price) || 0) - (Number(s.deposit) || 0))}</span></p>
+        </div>
+      </section>
+
+      <!-- Equipment -->
+      <section class="bg-navy-light rounded-2xl p-4 border border-gold/10">
+        <h3 class="text-sm font-semibold text-gold mb-3"><i class="fa-solid fa-boxes-stacked mr-1.5"></i>เลือกอุปกรณ์</h3>
+        <div class="space-y-3">
+          ${Object.keys(categorized).map(cat => `
+            <div>
+              <p class="text-sm text-gray-500 mb-1.5 uppercase">${CATEGORY_LABELS[cat] || cat}</p>
+              <div class="space-y-1.5">
+                ${categorized[cat].map(e => equipmentCheckRow(e)).join('')}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </section>
+
+      <!-- Remarks -->
+      <section class="bg-navy-light rounded-2xl p-4 border border-gold/10">
+        <h3 class="text-sm font-semibold text-gold mb-3"><i class="fa-solid fa-note-sticky mr-1.5"></i>หมายเหตุ</h3>
+        <textarea id="field-remarks" oninput="updateField('remarks', this.value)"
+          class="w-full bg-navy border border-gold/10 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-gold/40" rows="2">${s.remarks}</textarea>
+      </section>
+
+      ${s.id ? `
+      <button onclick="openJobSummary('${s.id}')" class="w-full bg-gold/10 border border-gold/30 text-gold text-sm font-medium rounded-xl py-2.5">
+        <i class="fa-solid fa-file-invoice mr-1.5"></i>ดูสรุปงาน / แชร์
+      </button>
+      <button onclick="deleteBookingConfirm('${s.id}')" class="w-full bg-red-500/10 border border-red-500/30 text-red-400 text-sm font-medium rounded-xl py-2.5">
+        <i class="fa-solid fa-trash mr-1.5"></i>ลบการจองนี้
+      </button>` : ''}
+    </div>
+  </div>
+  `;
+}
+
+function formInput(field, label, value, type) {
+  return `
+    <div>
+      <label class="text-sm text-gray-500 block mb-1">${label}</label>
+      <input id="field-${field}" type="${type}" value="${value || ''}" oninput="updateField('${field}', this.value)"
+        class="w-full bg-navy border border-gold/10 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-gold/40">
+    </div>
+  `;
+}
+
+function selectInput(field, label, value, options) {
+  return `
+    <div>
+      <label class="text-sm text-gray-500 block mb-1">${label}</label>
+      <select id="field-${field}" onchange="updateField('${field}', this.value)"
+        class="w-full bg-navy border border-gold/10 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-gold/40">
+        <option value="">เลือก${label}</option>
+        ${options.map(o => `<option value="${o.value}" ${value === o.value ? 'selected' : ''}>${o.label}</option>`).join('')}
+      </select>
+    </div>
+  `;
+}
+
+function equipmentCheckRow(e) {
+  const s = __bookingFormState;
+  const selected = s.equipment.find(item => item.name === e.name);
+  return `
+    <div class="flex items-center justify-between bg-navy rounded-lg px-3 py-2">
+      <label class="flex items-center gap-2 flex-1">
+        <input type="checkbox" ${selected ? 'checked' : ''} onchange="toggleEquipment('${e.name}', this.checked)" class="accent-gold w-4 h-4">
+        <span class="text-sm text-gray-200">${e.name}</span>
+      </label>
+      ${selected ? `
+        <input type="number" min="1" max="${e.availableQty}" value="${selected.qty || 1}"
+          onchange="updateEquipmentQty('${e.name}', this.value)"
+          class="w-14 bg-navy-light border border-gold/20 rounded px-2 py-1 text-sm text-gray-100 text-center">
+      ` : `<span class="text-sm text-gray-500">มี ${e.availableQty} ${e.unit}</span>`}
+    </div>
+  `;
+}
+
+function updateField(field, value) {
+  __bookingFormState[field] = value;
+  if (field === 'price' || field === 'deposit') {
+    const remaining = (Number(__bookingFormState.price) || 0) - (Number(__bookingFormState.deposit) || 0);
+    const el = document.getElementById('remaining-display');
+    if (el) el.textContent = Utils.formatMoney(remaining);
+  }
+}
+
+function setJobType(value) {
+  __bookingFormState.jobType = value;
+  JOB_TYPES.forEach(jt => {
+    const btn = document.getElementById('jobtype-' + jt.value);
+    if (btn) btn.className = `flex flex-col items-center gap-1 py-2.5 rounded-xl border transition-colors ${jt.value === value ? 'bg-gold/20 border-gold text-gold' : 'bg-navy border-gold/10 text-gray-400'}`;
+  });
+}
+
+function toggleEquipment(name, checked) {
+  if (checked) {
+    __bookingFormState.equipment.push({ name, qty: 1 });
+  } else {
+    __bookingFormState.equipment = __bookingFormState.equipment.filter(e => e.name !== name);
+  }
+  paintBookingForm(__equipmentCache, __bookingFormTemplates);
+}
+
+function updateEquipmentQty(name, qty) {
+  const item = __bookingFormState.equipment.find(e => e.name === name);
+  if (item) item.qty = Number(qty);
+}
+
+function applyTemplateByIndex(index) {
+  const template = __bookingFormTemplates[index];
+  if (!template) return;
+  __bookingFormState.jobType = template.jobType;
+  __bookingFormState.equipment = (template.equipmentPreset || []).map(name => ({ name, qty: 1 }));
+  paintBookingForm(__equipmentCache, __bookingFormTemplates);
+  Utils.toast('success', `ใช้เทมเพลต "${template.name}" แล้ว`);
+}
+
+function closeBookingForm() {
+  document.getElementById('modal-root').innerHTML = '';
+  __bookingFormState = null;
+}
+
+async function submitBookingForm() {
+  const s = __bookingFormState;
+  if (!s.customerName || !s.date) {
+    Utils.toast('error', 'กรุณากรอกชื่อลูกค้าและวันที่');
+    return;
+  }
+
+  Utils.loading('กำลังตรวจสอบคิว...');
+  try {
+    const conflicts = await BawmusicAPI.checkConflicts({ id: s.id, date: s.date, equipment: s.equipment });
+
+    if (conflicts.hasConflict) {
+      Utils.closeLoading();
+      let msg = '';
+      if (conflicts.dateConflict) {
+        msg += `<p style="margin-bottom:8px;">⚠️ มีงานอื่นในวันเดียวกัน: ${conflicts.conflictingBookings.map(b => b.customerName).join(', ')}</p>`;
+      }
+      if (conflicts.equipmentConflicts.length) {
+        msg += conflicts.equipmentConflicts.map(c => `<p style="margin-bottom:4px;">🔧 ${c.name}: ต้องการ ${c.requested} แต่มี ${c.available} (จองแล้ว ${c.alreadyBooked})</p>`).join('');
+      }
+      const proceed = await Swal.fire({
+        title: 'พบความขัดแย้ง!', html: msg, icon: 'warning',
+        showCancelButton: true, confirmButtonText: 'บันทึกต่อไป', cancelButtonText: 'แก้ไข',
+        confirmButtonColor: '#d4af37', background: Utils.swalBg(), color: Utils.swalColor()
+      });
+      if (!proceed.isConfirmed) return;
+      Utils.loading('กำลังบันทึก...');
+    }
+
+    if (s.id) {
+      await BawmusicAPI.updateBooking(s.id, s);
+    } else {
+      await BawmusicAPI.createBooking(s);
+    }
+
+    Utils.closeLoading();
+    Utils.toast('success', 'บันทึกการจองสำเร็จ');
+    closeBookingForm();
+    if (window.__app.currentView === 'dashboard') renderDashboard();
+    if (window.__app.currentView === 'bookings') renderBookings();
+
+  } catch (err) {
+    Utils.closeLoading();
+    Utils.toast('error', 'เกิดข้อผิดพลาด: ' + err.message);
+  }
+}
+
+async function deleteBookingConfirm(id) {
+  const ok = await Utils.confirm('ลบการจองนี้?', 'การกระทำนี้ไม่สามารถย้อนกลับได้', 'ลบ');
+  if (!ok) return;
+  Utils.loading('กำลังลบ...');
+  try {
+    await BawmusicAPI.deleteBooking(id);
+    Utils.closeLoading();
+    Utils.toast('success', 'ลบสำเร็จ');
+    closeBookingForm();
+    if (window.__app.currentView === 'dashboard') renderDashboard();
+    if (window.__app.currentView === 'bookings') renderBookings();
+  } catch (err) {
+    Utils.closeLoading();
+    Utils.toast('error', 'เกิดข้อผิดพลาด');
+  }
+}
