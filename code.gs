@@ -100,6 +100,9 @@ function handleRequest(e, method) {
       // Audit Log
       case 'listAuditLog': result = listAuditLog(params); break;
 
+      // LIFF (ลูกค้าจองผ่าน LINE)
+      case 'submitLiffBooking': result = submitLiffBooking(params.idToken, params.data); break;
+
       // Dashboard / Analytics
       case 'getDashboard': result = getDashboardData(); break;
       case 'getAnalytics': result = getAnalytics(params); break;
@@ -821,6 +824,65 @@ function listAuditLog(params) {
     logs = logs.slice(0, Number(params.limit));
   }
   return logs;
+}
+
+// ---------- LIFF (ลูกค้าจองผ่าน LINE) ----------
+
+// รับการจองจากหน้า LIFF: verify token กับ LINE ก่อนเสมอ (ห้ามเชื่อชื่อ/ข้อมูลจาก client ตรงๆ)
+// จากนั้นผูก/สร้างลูกค้าให้อัตโนมัติ แล้วสร้างรายการจองสถานะ "pending" รอแอดมินยืนยันราคา
+function submitLiffBooking(idToken, data) {
+  if (!data || !data.date) throw new Error('กรุณาระบุวันที่จัดงาน');
+
+  var profile = verifyLineIdToken(idToken); // throws ถ้า token ไม่ถูกต้อง
+  upsertMember(profile);
+
+  var customers = listCustomers({});
+  var existing = customers.find(function (c) { return c.memberId === profile.lineUserId; });
+  if (!existing && data.phone) {
+    existing = customers.find(function (c) { return c.phone && String(c.phone).trim() === String(data.phone).trim(); });
+  }
+
+  var customerId;
+  var customerName = (data.customerName || profile.displayName || '').trim();
+
+  if (existing) {
+    var updates = {};
+    if (!existing.memberId) updates.memberId = profile.lineUserId;
+    if (data.phone && data.phone !== existing.phone) updates.phone = data.phone;
+    if (customerName && customerName !== existing.name) updates.name = customerName;
+    if (Object.keys(updates).length) updateCustomer(existing.id, updates, profile.lineUserId);
+    customerId = existing.id;
+  } else {
+    var created = createCustomer({
+      name: customerName || 'ลูกค้า LINE',
+      phone: data.phone || '',
+      line: profile.displayName || '',
+      memberId: profile.lineUserId
+    }, profile.lineUserId);
+    customerId = created.id;
+  }
+
+  var booking = createBooking({
+    customerId: customerId,
+    customerName: customerName || 'ลูกค้า LINE',
+    phone: data.phone || '',
+    line: profile.displayName || '',
+    venue: data.venue || '',
+    mapLink: data.mapLink || '',
+    province: data.province || '',
+    date: data.date,
+    startTime: data.startTime || '',
+    endTime: data.endTime || '',
+    jobType: data.jobType || 'Custom',
+    package: '',
+    price: 0,
+    deposit: 0,
+    remarks: data.remarks || '',
+    equipment: [],
+    status: 'pending' // งานที่ลูกค้าจองเองผ่าน LIFF ต้องรอแอดมินยืนยันและแจ้งราคา
+  }, profile.lineUserId);
+
+  return { id: booking.id, bookingToken: booking.bookingToken, memberId: profile.lineUserId };
 }
 
 // ---------- DASHBOARD ----------
