@@ -1,0 +1,176 @@
+/* BAWMUSIC — Custom styles beyond Tailwind utilities */
+
+[x-cloak] { display: none !important; }
+
+* { -webkit-tap-highlight-color: transparent; }
+
+body {
+  overscroll-behavior-y: contain;
+}
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #22d3ee; border-radius: 4px; }
+
+.pb-safe { padding-bottom: env(safe-area-inset-bottom, 0.5rem); }
+
+/* SweetAlert2 theming to match the neon stage-light design */
+.swal2-popup { border-radius: 1.25rem !important; font-family: 'Kanit', sans-serif !important; }
+.swal2-input, .swal2-textarea, .swal2-select {
+  background: #08080d !important;
+  border: 1px solid rgba(34, 211, 238, 0.25) !important;
+  color: #fff !important;
+  border-radius: 0.5rem !important;
+  font-family: 'Kanit', sans-serif !important;
+  font-size: 1.05rem !important;
+}
+.swal2-select { padding: 0.65rem !important; }
+.swal2-title { font-family: 'Kanit', sans-serif !important; font-size: 1.3rem !important; }
+.swal2-html-container { font-family: 'Kanit', sans-serif !important; font-size: 1rem !important; }
+.swal2-confirm, .swal2-cancel, .swal2-deny {
+  font-family: 'Kanit', sans-serif !important;
+  font-size: 1rem !important;
+  padding: 0.7rem 1.5rem !important;
+}
+.swal2-toast .swal2-title { font-size: 0.95rem !important; }
+
+/* ป้องกัน iOS Safari ซูมจอเมื่อแตะช่องกรอกข้อมูล (ต้องใช้ font-size >= 16px) */
+@media (max-width: 768px) {
+  input, textarea, select { font-size: 16px !important; }
+}
+
+/* Smooth active-state feedback for tappable cards (mobile-first) */
+button, [onclick] { touch-action: manipulation; }
+
+/* Print styles for Job Summary */
+@media print {
+  body * { visibility: hidden; }
+  #job-summary-card, #job-summary-card * { visibility: visible; }
+  #job-summary-card { position: absolute; top: 0; left: 0; width: 100%; }
+}
+
+/* ============================================
+   LIGHT MODE — auto-switches 06:00–18:00
+   "Entertainment" palette: crisp white/violet-tinted
+   backgrounds with a vivid indigo/violet accent,
+   replacing the muted beige of the old luxury theme.
+   ============================================ */
+
+[data-theme="light"] body {
+  background-color: #f5f3ff !important;
+  color: #1e1b2e !important;
+}
+
+[data-theme="light"] .bg-navy-dark,
+[data-theme="light"] .bg-navy-dark\/95 {
+  background-color: #f5f3ff !important;
+}
+
+[data-theme="light"] .bg-navy,
+[data-theme="light"] .bg-navy\/95 {
+  background-color: #ffffff !important;
+}
+
+[data-theme="light"] .bg-navy-light,
+[data-theme="light"] .bg-navy-light\/50 {
+  background-color: #ffffff !important;
+}
+
+[data-theme="light"] .text-gray-100,
+[data-theme="light"] .text-gray-200,
+[data-theme="light"] .text-gray-300 {
+  color: #201c33 !important;
+}
+
+[data-theme="light"] .text-gray-400 {
+  color: #6b6580 !important;
+}
+
+[data-theme="light"] .text-gray-500,
+[data-theme="light"] .placeholder-gray-500::placeholder {
+  color: #948da8 !important;
+}
+
+[data-theme="light"] .border-gold\/10 { border-color: rgba(124, 58, 237, 0.15) !important; }
+[data-theme="light"] .border-gold\/20 { border-color: rgba(124, 58, 237, 0.25) !important; }
+[data-theme="light"] .border-gold\/30 { border-color: rgba(124, 58, 237, 0.4) !important; }
+[data-theme="light"] .border-gold\/40 { border-color: rgba(124, 58, 237, 0.55) !important; }
+
+[data-theme="light"] .bg-gold\/10 { background-color: rgba(124, 58, 237, 0.10) !important; }
+[data-theme="light"] .bg-gold\/20 { background-color: rgba(124, 58, 237, 0.18) !important; }
+
+[data-theme="light"] .text-gold { color: #7c3aed !important; }
+[data-theme="light"] .text-neon { color: #c026d3 !important; }
+
+/* เปลี่ยน gradient จุดเด่น (โลโก้/FAB/ปุ่มติดตั้ง) เป็นโทนม่วง-ชมพูสดใสในโหมดสว่าง */
+[data-theme="light"] .from-gold {
+  --tw-gradient-from: #7c3aed var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: rgb(124 58 237 / 0) var(--tw-gradient-to-position) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+[data-theme="light"] .to-gold-dark {
+  --tw-gradient-to: #5b21b6 var(--tw-gradient-to-position) !important;
+}
+[data-theme="light"] .to-neon {
+  --tw-gradient-to: #c026d3 var(--tw-gradient-to-position) !important;
+}
+[data-theme="light"] .shadow-gold\/20,
+[data-theme="light"] .shadow-gold\/30,
+[data-theme="light"] .shadow-gold\/40 {
+  --tw-shadow-color: rgba(124, 58, 237, 0.35) !important;
+}
+
+[data-theme="light"] input,
+[data-theme="light"] textarea,
+[data-theme="light"] select {
+  color: #201c33 !important;
+}
+
+[data-theme="light"] .swal2-input,
+[data-theme="light"] .swal2-textarea,
+[data-theme="light"] .swal2-select {
+  background: #f5f3ff !important;
+  border: 1px solid rgba(124, 58, 237, 0.3) !important;
+  color: #201c33 !important;
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb { background: #7c3aed; }
+
+[data-theme="light"] .pulse-dot {
+  background-color: #7c3aed !important;
+}
+
+/* ไฟกระพริบแบบนุ่มนวลสำหรับวันที่มีการจองในปฏิทิน (โทนนีออนฟ้า) */
+@keyframes softPulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.5); }
+  50% { opacity: 0.55; box-shadow: 0 0 10px 5px rgba(34, 211, 238, 0.3); }
+}
+.pulse-dot {
+  animation: softPulse 2.4s ease-in-out infinite;
+}
+
+/* Fade-in ใช้ตอนสลับหน้า / เนื้อหาโหลดเสร็จ เพื่อไม่ให้ดูตัดฉับ */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.view-fade-in {
+  animation: fadeIn 0.28s ease-out;
+}
+
+/* Spinner ที่ใช้คู่กับ skeleton ระหว่างโหลดข้อมูล */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.bawmusic-spinner {
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 3px solid rgba(34, 211, 238, 0.2);
+  border-top-color: #22d3ee;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+[data-theme="light"] .bawmusic-spinner {
+  border-color: rgba(124, 58, 237, 0.2);
+  border-top-color: #7c3aed;
+}
