@@ -76,6 +76,68 @@
 
 ---
 
+---
+
+## ส่วนที่ 4: เตรียมพร้อมสำหรับ LINE LIFF
+
+ระบบมีชีตและ API รองรับ LINE ไว้แล้ว (Members, Payments, AuditLog) และตอนนี้มี **หน้า LIFF ให้ลูกค้าจองคิวเอง** พร้อมใช้งานที่ `liff/index.html`
+
+### ค่า config ที่ใช้อยู่ตอนนี้
+| รายการ | ค่า |
+|---|---|
+| LIFF ID | `2007938843-WTd19n2O` |
+| LIFF URL | `https://liff.line.me/2007938843-WTd19n2O` |
+| LINE Login Channel ID | `2007938843` |
+| Messaging API Channel ID | `2009136431` |
+
+### ขั้นตอนที่ 1 — แก้ API_URL ในหน้า LIFF
+เปิดไฟล์ `liff/index.html` หา:
+```js
+const API_URL = 'https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec';
+```
+แก้เป็น Web App URL **เดียวกัน** กับที่ใช้ใน `js/api.js` ของแอปแอดมิน (ต้องเป็น deployment เดียวกัน เพราะใช้ฐานข้อมูลชุดเดียวกัน)
+
+### ขั้นตอนที่ 2 — ตั้งค่า Script Property สำหรับ verify token
+ไปที่ Apps Script → Project Settings → Script Properties → เพิ่ม:
+
+| Key | Value |
+|---|---|
+| `LINE_LOGIN_CHANNEL_ID` | `2007938843` |
+
+จำเป็นเพื่อให้ `verifyLineToken` ตรวจสอบ ID Token กับ LINE ได้ถูก channel
+
+### ขั้นตอนที่ 3 — อัปโหลดขึ้น GitHub Pages
+อัปโหลดโฟลเดอร์ `liff/` ทั้งโฟลเดอร์ขึ้น repository เดียวกับแอปแอดมิน (จะได้ URL เช่น `https://yourusername.github.io/bawmusic/liff/`)
+
+### ขั้นตอนที่ 4 — ผูก LIFF Endpoint URL ใน LINE Developers Console
+1. ไปที่ LINE Developers Console → เลือก Provider → LIFF app ที่มี LIFF ID `2007938843-WTd19n2O`
+2. แก้ **Endpoint URL** เป็นลิงก์ GitHub Pages จากขั้นตอนที่ 3 (เช่น `https://yourusername.github.io/bawmusic/liff/`)
+3. Size แนะนำ: `Full` (เต็มจอ เหมาะกับฟอร์มยาว)
+4. Scopes ที่ต้องเปิด: `profile`, `openid`
+
+### ทดสอบ
+เปิดลิงก์ `https://liff.line.me/2007938843-WTd19n2O` ผ่านแอป LINE (ต้องเปิดผ่านแอป LINE เท่านั้น เปิดในเบราว์เซอร์ปกติจะใช้งานไม่ได้เต็มรูปแบบ) ควรเห็นหน้าฟอร์มจองคิวพร้อมชื่อ/รูปโปรไฟล์ LINE ของคุณ
+
+### สถานะการจองจาก LIFF
+การจองที่ลูกค้าส่งผ่าน LIFF จะถูกบันทึกด้วยสถานะ **"รอยืนยัน" (pending)** เสมอ — แอดมินต้องเข้าไปที่แอปหลัก เปิดรายการจองนั้น กรอกราคา/แพ็คเกจ แล้วเปลี่ยนสถานะเป็น "ยืนยันแล้ว" เอง (ยังไม่มีการแจ้งเตือนอัตโนมัติเข้า LINE — เป็นเฟสถัดไปที่ต้องใช้ Channel Access Token)
+
+### สิ่งที่ยังไม่ได้ทำ (เฟสถัดไป)
+- ส่งข้อความยืนยัน/แจ้งเตือนกลับหาลูกค้าอัตโนมัติผ่าน LINE OA (ต้องใช้ **Channel Access Token** จาก Messaging API Channel ซึ่งเป็นความลับ ยังไม่ได้รับมา)
+- ระบบแคมเปญ/โปรโมชั่นส่งหาลูกค้ากลุ่มเป้าหมาย
+
+### API backend ที่รองรับ LINE (อ้างอิง)
+```
+submitLiffBooking      — รับการจองจากหน้า LIFF (verify token + บันทึกอัตโนมัติ)
+verifyLineToken        — ตรวจสอบ LINE ID Token กับเซิร์ฟเวอร์ LINE โดยตรง
+verifyAndUpsertMember  — verify token + บันทึกสมาชิกในขั้นตอนเดียว
+upsertMember / listMembers / getMemberByLineId
+createPayment / updatePayment / deletePayment / listPayments / getPayment
+listAuditLog
+getBookingByToken      — ใช้แสดงรายละเอียดการจองผ่านลิงก์ที่ส่งให้ลูกค้า โดยไม่ต้องรู้ id จริง
+```
+
+---
+
 ## การแก้ปัญหาเบื้องต้น
 
 **ปัญหา: เปิดแอปแล้วโหลดข้อมูลไม่ขึ้น**
@@ -88,6 +150,11 @@
 
 **ปัญหา: อยากเริ่มฐานข้อมูลใหม่ทั้งหมด**
 - ลบชีตทั้งหมดในสเปรดชีต แล้วไปที่ Apps Script → Project Settings → ลบ Script Property ชื่อ `DB_INITIALIZED` จากนั้นเรียก API อีกครั้งเพื่อสร้างชีตใหม่
+
+**ปัญหา: หน้า LIFF ขึ้น "เกิดข้อผิดพลาด"**
+- ต้องเปิดผ่านแอป LINE เท่านั้น (แตะลิงก์ในแชท ไม่ใช่วางใน Chrome/Safari ตรงๆ)
+- ตรวจสอบว่าตั้งค่า Endpoint URL ใน LINE Developers Console ตรงกับ URL จริงที่ deploy แล้ว
+- ตรวจสอบว่าตั้ง Script Property `LINE_LOGIN_CHANNEL_ID` แล้ว
 
 ---
 
@@ -115,6 +182,8 @@ bawmusic/
 │       └── jobSummary.js
 ├── assets/
 │   └── icons/                ← ไอคอนแอปทุกขนาด
+├── liff/
+│   └── index.html            ← หน้าจองคิวสำหรับลูกค้า (⚠️ แก้ API_URL ที่นี่ด้วย)
 └── api/
     └── Code.gs                ← คัดลอกไปวางใน Apps Script (ไม่ต้องอัปโหลดขึ้น GitHub)
 ```
