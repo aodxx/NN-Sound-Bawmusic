@@ -26,6 +26,10 @@ var MEMBERS_HEADERS = ['lineUserId', 'displayName', 'pictureUrl', 'isFriend', 'i
 var PAYMENTS_HEADERS = ['id', 'bookingId', 'amount', 'type', 'paymentDate', 'evidenceUrl', 'notes', 'createdAt'];
 var AUDIT_LOG_HEADERS = ['id', 'actorId', 'action', 'entity', 'beforeData', 'afterData', 'timestamp'];
 
+// Action ที่เปิดให้เรียกได้โดยไม่ต้องมี admin token (ใช้จากหน้า LIFF ของลูกค้า)
+// ทุก action อื่นนอกเหนือจากนี้ต้องส่ง adminToken ที่ตรงกับ Script Property "ADMIN_TOKEN" มาด้วย
+var PUBLIC_ACTIONS = ['submitLiffBooking', 'verifyAndUpsertMember', 'verifyLineToken', 'getBookingByToken'];
+
 // ---------- ENTRY POINTS ----------
 
 function doGet(e) {
@@ -46,6 +50,10 @@ function handleRequest(e, method) {
 
     if (!action) {
       return jsonResponse({ success: false, error: 'Missing action parameter' }, 400);
+    }
+
+    if (PUBLIC_ACTIONS.indexOf(action) === -1) {
+      requireAdminAuth(params.adminToken);
     }
 
     switch (action) {
@@ -87,7 +95,7 @@ function handleRequest(e, method) {
       case 'listMembers': result = listMembers(); break;
       case 'getMemberByLineId': result = getMemberByLineId(params.lineUserId); break;
       case 'upsertMember': result = upsertMember(params.data); break;
-      case 'verifyLineToken': result = verifyLineIdToken(params.idToken, params.clientId); break;
+      case 'verifyLineToken': result = verifyLineIdToken(params.idToken); break;
       case 'verifyAndUpsertMember': result = verifyAndUpsertMember(params.idToken); break;
 
       // Payments
@@ -102,6 +110,11 @@ function handleRequest(e, method) {
 
       // LIFF (ลูกค้าจองผ่าน LINE)
       case 'submitLiffBooking': result = submitLiffBooking(params.idToken, params.data); break;
+
+      // LINE Messaging
+      case 'sendBookingConfirmation': result = sendBookingConfirmation(params.id); break;
+      case 'sendCampaign': result = sendCampaign(params.segment, params.messages); break;
+      case 'getMemberIdsBySegment': result = getMemberIdsBySegment(params.segment); break;
 
       // Dashboard / Analytics
       case 'getDashboard': result = getDashboardData(); break;
@@ -122,6 +135,18 @@ function jsonResponse(obj, code) {
   var output = ContentService.createTextOutput(JSON.stringify(obj));
   output.setMimeType(ContentService.MimeType.JSON);
   return output;
+}
+
+// ตรวจสอบว่าเรียกมาจากแอปแอดมินจริง (ป้องกันบุคคลภายนอกที่รู้ URL เรียก action ที่ไม่ใช่ public ได้)
+// ต้องตั้ง Script Property "ADMIN_TOKEN" ก่อน ไม่เช่นนั้นจะปฏิเสธทุก action ที่ไม่ใช่ public เพื่อความปลอดภัย
+function requireAdminAuth(token) {
+  var adminToken = PropertiesService.getScriptProperties().getProperty('ADMIN_TOKEN');
+  if (!adminToken) {
+    throw new Error('ระบบยังไม่ได้ตั้งค่า ADMIN_TOKEN ใน Script Properties — กรุณาตั้งค่าก่อนใช้งาน (ดู INSTALL.md)');
+  }
+  if (!token || token !== adminToken) {
+    throw new Error('Unauthorized: admin token ไม่ถูกต้องหรือไม่ได้ส่งมา');
+  }
 }
 
 // ---------- DATABASE INIT ----------
@@ -472,6 +497,12 @@ function updateBooking(id, data, actorId) {
     }
   });
   logAudit(actorId, 'update_booking', 'Booking:' + id, before, data);
+
+  // ส่งข้อความยืนยันอัตโนมัติเมื่อสถานะเปลี่ยนเป็น "ยืนยันแล้ว" (ไม่ทำให้การอัปเดตล้มเหลวแม้ส่งไม่สำเร็จ)
+  if (data.status === 'confirmed' && before && before.status !== 'confirmed') {
+    try { sendBookingConfirmation(id); } catch (e) { Logger.log('sendBookingConfirmation failed: ' + e.message); }
+  }
+
   return { id: id };
 }
 
@@ -486,14 +517,23 @@ function deleteBooking(id, actorId) {
 }
 
 function checkConflicts(data) {
-  var bookings = listBookings({});
+  // ไม่นับงานที่ยกเลิกแล้วเป็นการชนคิว
+  var bookings = listBookings({}).filter(function (b) { return b.status !== 'cancelled'; });
+
   var sameDate = bookings.filter(function (b) {
     return b.date && new Date(b.date).toDateString() === new Date(data.date).toDateString() && b.id !== data.id;
   });
 
-  var dateConflict = sameDate.length > 0;
+  // ตรวจเฉพาะรายการที่ช่วงเวลาทับกันจริง (เช่น งานเช้า 08:00-11:00 กับงานเย็น 18:00-22:00 ไม่ถือว่าชน)
+  var timeOverlapping = sameDate.filter(function (b) {
+    return timeRangesOverlap(data.startTime, data.endTime, b.startTime, b.endTime);
+  });
+
+  var dateConflict = timeOverlapping.length > 0;
   var equipmentConflicts = [];
 
+  // อุปกรณ์ยังพิจารณาจากทุกงานในวันเดียวกัน (ไม่ใช่แค่ช่วงเวลาที่ทับกัน) เพราะอุปกรณ์ชุดเดียว
+  // มักใช้ 2 งานในวันเดียวไม่ได้จริงในทางปฏิบัติ (เวลาเดินทาง/เก็บของ)
   if (sameDate.length && data.equipment && data.equipment.length) {
     var usage = {};
     sameDate.forEach(function (b) {
@@ -520,10 +560,17 @@ function checkConflicts(data) {
 
   return {
     dateConflict: dateConflict,
-    conflictingBookings: sameDate.map(function (b) { return { id: b.id, customerName: b.customerName, jobType: b.jobType }; }),
+    conflictingBookings: timeOverlapping.map(function (b) { return { id: b.id, customerName: b.customerName, jobType: b.jobType }; }),
     equipmentConflicts: equipmentConflicts,
     hasConflict: dateConflict || equipmentConflicts.length > 0
   };
+}
+
+// ตรวจว่าช่วงเวลาสองช่วงทับกันหรือไม่ (รูปแบบ "HH:MM")
+// ถ้าข้อมูลเวลาไม่ครบฝั่งใดฝั่งหนึ่ง ถือว่าเป็นทั้งวันไว้ก่อนเพื่อความปลอดภัย (กันแจ้งเตือนพลาด)
+function timeRangesOverlap(startA, endA, startB, endB) {
+  if (!startA || !endA || !startB || !endB) return true;
+  return startA < endB && startB < endA;
 }
 
 // ---------- EQUIPMENT ----------
@@ -701,15 +748,16 @@ function getLineConfig() {
 
 // ตรวจสอบ ID Token จาก LINE Login (LIFF) กับเซิร์ฟเวอร์ LINE โดยตรง ป้องกันข้อมูลปลอมจากฝั่ง client
 // ต้องตั้งค่า Script Property "LINE_LOGIN_CHANNEL_ID" ก่อนใช้งาน (ดู INSTALL.md)
-function verifyLineIdToken(idToken, clientId) {
+// หมายเหตุด้านความปลอดภัย: ใช้เฉพาะค่าจาก Script Properties เท่านั้น ห้ามรับ client_id จากผู้เรียก
+// (ไม่เช่นนั้นผู้เรียกอาจส่ง channel ID อื่นมาแล้วผ่านการตรวจสอบด้วย token ที่ไม่ได้ออกให้ Bawmusic)
+function verifyLineIdToken(idToken) {
   if (!idToken) throw new Error('idToken is required');
   var config = getLineConfig();
-  var targetClientId = clientId || config.loginChannelId;
-  if (!targetClientId) throw new Error('LINE_LOGIN_CHANNEL_ID is not configured in Script Properties');
+  if (!config.loginChannelId) throw new Error('LINE_LOGIN_CHANNEL_ID is not configured in Script Properties');
 
   var response = UrlFetchApp.fetch('https://api.line.me/oauth2/v2.1/verify', {
     method: 'post',
-    payload: { id_token: idToken, client_id: targetClientId },
+    payload: { id_token: idToken, client_id: config.loginChannelId },
     muteHttpExceptions: true
   });
 
@@ -751,10 +799,28 @@ function getPayment(id) {
 
 function createPayment(data, actorId) {
   if (!data || !data.bookingId) throw new Error('bookingId is required');
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAMES.PAYMENTS);
-  var id = genId();
-  var amount = Number(data.amount) || 0;
 
+  var booking = getBooking(data.bookingId);
+  if (!booking) throw new Error('ไม่พบ Booking ที่ระบุ (bookingId ไม่ถูกต้อง)');
+
+  var amount = Number(data.amount);
+  if (!amount || amount <= 0) throw new Error('จำนวนเงินต้องมากกว่า 0');
+
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAMES.PAYMENTS);
+
+  // ป้องกันยอดมัดจำเดิมหาย: ถ้านี่คือ payment แรกของ booking นี้ และมีมัดจำเดิมอยู่ก่อนแล้ว
+  // (จากตอนที่ยังไม่มีระบบ Payments) ให้สร้างรายการย้อนหลังแทนมัดจำเดิมก่อน แล้วค่อยเพิ่มรายการใหม่
+  var existingPayments = listPayments({ bookingId: data.bookingId });
+  if (existingPayments.length === 0 && Number(booking.deposit) > 0) {
+    var backfillId = genId();
+    sheet.appendRow([
+      backfillId, data.bookingId, Number(booking.deposit), 'deposit',
+      booking.createdAt || new Date(), '', 'ยอดมัดจำเดิมก่อนใช้ระบบ Payments (สร้างอัตโนมัติ)', new Date()
+    ]);
+    logAudit(actorId, 'backfill_payment', 'Payment:' + backfillId, null, { bookingId: data.bookingId, amount: booking.deposit });
+  }
+
+  var id = genId();
   sheet.appendRow([
     id, data.bookingId, amount, data.type || 'deposit',
     data.paymentDate || new Date(), data.evidenceUrl || '', data.notes || '', new Date()
@@ -771,6 +837,15 @@ function updatePayment(id, data, actorId) {
   if (rowIdx === -1) throw new Error('Payment not found');
 
   var before = getPayment(id);
+
+  if (data.amount !== undefined) {
+    var amt = Number(data.amount);
+    if (!amt || amt <= 0) throw new Error('จำนวนเงินต้องมากกว่า 0');
+  }
+  if (data.bookingId && !getBooking(data.bookingId)) {
+    throw new Error('ไม่พบ Booking ปลายทางที่ระบุ (bookingId ไม่ถูกต้อง)');
+  }
+
   var headers = getHeaders(sheet);
   headers.forEach(function (h, i) {
     if (data.hasOwnProperty(h) && h !== 'id') {
@@ -779,8 +854,12 @@ function updatePayment(id, data, actorId) {
   });
   logAudit(actorId, 'update_payment', 'Payment:' + id, before, data);
 
-  var bookingId = data.bookingId || (before && before.bookingId);
-  if (bookingId) recalcBookingPayments(bookingId, actorId);
+  // คำนวณยอดใหม่ทั้ง booking เดิมและ booking ปลายทาง (ถ้าย้าย payment ไปคนละ booking)
+  var oldBookingId = before && before.bookingId;
+  var newBookingId = data.bookingId || oldBookingId;
+  if (oldBookingId) recalcBookingPayments(oldBookingId, actorId);
+  if (newBookingId && newBookingId !== oldBookingId) recalcBookingPayments(newBookingId, actorId);
+
   return { id: id };
 }
 
@@ -799,11 +878,15 @@ function deletePayment(id, actorId) {
 
 // รวมยอดชำระทั้งหมดของ booking แล้วอัปเดตมัดจำ/ยอดคงเหลือให้อัตโนมัติ
 // เรียกทุกครั้งที่มีการสร้าง/แก้ไข/ลบ payment เพื่อให้ Bookings sheet ตรงกับ Payments เสมอ
+// รายการประเภท "refund" จะถูกหักออกจากยอดรวมแทนที่จะบวกเพิ่ม
 function recalcBookingPayments(bookingId, actorId) {
   var booking = getBooking(bookingId);
   if (!booking) return;
   var payments = listPayments({ bookingId: bookingId });
-  var totalPaid = payments.reduce(function (sum, p) { return sum + (Number(p.amount) || 0); }, 0);
+  var totalPaid = payments.reduce(function (sum, p) {
+    var amt = Number(p.amount) || 0;
+    return p.type === 'refund' ? sum - amt : sum + amt;
+  }, 0);
   updateBooking(bookingId, { deposit: totalPaid }, actorId || 'system');
 }
 
@@ -885,10 +968,227 @@ function submitLiffBooking(idToken, data) {
   return { id: booking.id, bookingToken: booking.bookingToken, memberId: profile.lineUserId };
 }
 
+// ---------- LINE MESSAGING ----------
+
+// ส่งข้อความ push ให้ผู้ใช้ LINE 1 คน (ต้องตั้ง Script Property "LINE_CHANNEL_ACCESS_TOKEN" ก่อนใช้งาน)
+function sendLineMessage(lineUserId, messages) {
+  var config = getLineConfig();
+  if (!config.messagingChannelAccessToken) {
+    throw new Error('LINE_CHANNEL_ACCESS_TOKEN is not configured in Script Properties');
+  }
+  var response = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/push', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { Authorization: 'Bearer ' + config.messagingChannelAccessToken },
+    payload: JSON.stringify({ to: lineUserId, messages: messages }),
+    muteHttpExceptions: true
+  });
+  var code = response.getResponseCode();
+  if (code !== 200) {
+    throw new Error('LINE push failed (' + code + '): ' + response.getContentText());
+  }
+  return { success: true };
+}
+
+// ส่งข้อความให้หลายคนพร้อมกัน (สูงสุด 500 คน/ครั้ง ตามข้อจำกัดของ LINE — แบ่งชุดให้อัตโนมัติถ้าเกิน)
+function pushToMembers(lineUserIds, messages) {
+  var config = getLineConfig();
+  if (!config.messagingChannelAccessToken) {
+    throw new Error('LINE_CHANNEL_ACCESS_TOKEN is not configured in Script Properties');
+  }
+  var chunks = [];
+  for (var i = 0; i < lineUserIds.length; i += 500) {
+    chunks.push(lineUserIds.slice(i, i + 500));
+  }
+  chunks.forEach(function (chunk) {
+    UrlFetchApp.fetch('https://api.line.me/v2/bot/message/multicast', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { Authorization: 'Bearer ' + config.messagingChannelAccessToken },
+      payload: JSON.stringify({ to: chunk, messages: messages }),
+      muteHttpExceptions: true
+    });
+  });
+  return { success: true, recipientCount: lineUserIds.length };
+}
+
+// ส่งหาเพื่อนทุกคนของ LINE OA (ไม่เลือกกลุ่ม)
+function broadcastToAllFriends(messages) {
+  var config = getLineConfig();
+  if (!config.messagingChannelAccessToken) {
+    throw new Error('LINE_CHANNEL_ACCESS_TOKEN is not configured in Script Properties');
+  }
+  var response = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/broadcast', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { Authorization: 'Bearer ' + config.messagingChannelAccessToken },
+    payload: JSON.stringify({ messages: messages }),
+    muteHttpExceptions: true
+  });
+  var code = response.getResponseCode();
+  if (code !== 200) {
+    throw new Error('LINE broadcast failed (' + code + '): ' + response.getContentText());
+  }
+  return { success: true };
+}
+
+// ส่งข้อความยืนยันการจองแบบ Flex Message ให้ลูกค้า (เรียกอัตโนมัติเมื่อ status เปลี่ยนเป็น confirmed)
+function sendBookingConfirmation(bookingId) {
+  var booking = getBooking(bookingId);
+  if (!booking) throw new Error('Booking not found');
+  if (!booking.customerId) return { skipped: true, reason: 'ไม่มีลูกค้าผูกกับการจองนี้' };
+
+  var customer = getCustomer(booking.customerId);
+  if (!customer || !customer.memberId) return { skipped: true, reason: 'ลูกค้ายังไม่ได้เชื่อมบัญชี LINE (ไม่ได้จองผ่าน LIFF)' };
+
+  var settings = getSettings();
+  var flexMessage = buildBookingConfirmationFlex(booking, settings);
+  sendLineMessage(customer.memberId, [flexMessage]);
+  logAudit('system', 'send_line_confirmation', 'Booking:' + bookingId, null, { to: customer.memberId });
+  return { success: true };
+}
+
+function buildBookingConfirmationFlex(booking, settings) {
+  return {
+    type: 'flex',
+    altText: 'ยืนยันการจองงาน — ' + (settings.bandName || 'Bawmusic'),
+    contents: {
+      type: 'bubble',
+      header: {
+        type: 'box', layout: 'vertical', backgroundColor: '#08080d', paddingAll: 'lg',
+        contents: [
+          { type: 'text', text: settings.bandName || 'Bawmusic', color: '#22d3ee', weight: 'bold', size: 'lg' },
+          { type: 'text', text: '✓ ยืนยันการจองงานเรียบร้อยแล้ว', color: '#ffffff', size: 'sm', margin: 'sm' }
+        ]
+      },
+      body: {
+        type: 'box', layout: 'vertical', spacing: 'md', paddingAll: 'lg',
+        contents: [
+          flexRow('วันที่', formatThaiDate(booking.date)),
+          flexRow('เวลา', (booking.startTime || '-') + ' - ' + (booking.endTime || '-')),
+          flexRow('สถานที่', booking.venue || '-'),
+          flexRow('ประเภทงาน', jobTypeLabelTh(booking.jobType)),
+          { type: 'separator', margin: 'md' },
+          flexRow('ราคา', formatMoneyTh(booking.price)),
+          flexRow('มัดจำแล้ว', formatMoneyTh(booking.deposit)),
+          flexRow('คงเหลือ', formatMoneyTh(booking.remaining))
+        ]
+      },
+      footer: {
+        type: 'box', layout: 'vertical',
+        contents: [
+          { type: 'text', text: 'ขอบคุณที่ไว้วางใจเราค่ะ 🙏', size: 'sm', color: '#888888', align: 'center', wrap: true }
+        ]
+      }
+    }
+  };
+}
+
+function flexRow(label, value) {
+  return {
+    type: 'box', layout: 'horizontal',
+    contents: [
+      { type: 'text', text: label, color: '#999999', size: 'sm', flex: 2 },
+      { type: 'text', text: String(value), color: '#333333', size: 'sm', flex: 3, wrap: true, align: 'end' }
+    ]
+  };
+}
+
+function formatThaiDate(dateVal) {
+  if (!dateVal) return '-';
+  var d = new Date(dateVal);
+  var months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+  return d.getDate() + ' ' + months[d.getMonth()] + ' ' + (d.getFullYear() + 543);
+}
+
+function formatMoneyTh(num) {
+  num = Number(num) || 0;
+  return num.toLocaleString('th-TH') + ' บาท';
+}
+
+function jobTypeLabelTh(type) {
+  var map = {
+    Wedding: 'งานแต่งงาน', Ordination: 'งานบวช', Funeral: 'งานศพ',
+    Corporate: 'งานองค์กร', Birthday: 'งานวันเกิด', Concert: 'คอนเสิร์ต', Custom: 'อื่นๆ'
+  };
+  return map[type] || type || '-';
+}
+
+// ---------- CAMPAIGN / SEGMENTS ----------
+
+// แบ่งกลุ่มลูกค้าสำหรับส่ง "แคมเปญ/โฆษณา" เท่านั้น — บังคับกรองเฉพาะสมาชิกที่ยินยอมรับการตลาดแล้วเสมอ
+// (ข้อความเชิงธุรกรรม เช่น ยืนยันการจอง ไม่ผ่านฟังก์ชันนี้ ใช้ sendBookingConfirmation แยกต่างหาก จึงไม่ต้องเช็คความยินยอม)
+function getMemberIdsBySegment(segment) {
+  var members = listMembers().filter(function (m) {
+    return m.isFriend && !m.isBlocked && m.marketingConsent;
+  });
+  var allowedIds = {};
+  members.forEach(function (m) { allowedIds[m.lineUserId] = true; });
+
+  var customers = listCustomers({});
+  var bookings = listBookings({});
+
+  function memberIdOfBooking(b) {
+    var cust = customers.find(function (c) { return c.id === b.customerId; });
+    return cust && cust.memberId ? cust.memberId : null;
+  }
+
+  switch (segment) {
+    case 'all':
+    case 'marketing_consent':
+      return members.map(function (m) { return m.lineUserId; });
+
+    case 'has_booked': {
+      var bookedIds = {};
+      bookings.forEach(function (b) {
+        var mid = memberIdOfBooking(b);
+        if (mid && allowedIds[mid]) bookedIds[mid] = true;
+      });
+      return Object.keys(bookedIds);
+    }
+
+    case 'never_booked': {
+      var booked = {};
+      bookings.forEach(function (b) {
+        var mid = memberIdOfBooking(b);
+        if (mid) booked[mid] = true;
+      });
+      return members.filter(function (m) { return !booked[m.lineUserId]; }).map(function (m) { return m.lineUserId; });
+    }
+
+    case 'inactive_6_months': {
+      var sixMonthsAgo = new Date();
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+      var lastBookingByMember = {};
+      bookings.forEach(function (b) {
+        var mid = memberIdOfBooking(b);
+        if (!mid || !allowedIds[mid]) return;
+        var d = new Date(b.date);
+        if (!lastBookingByMember[mid] || d > lastBookingByMember[mid]) lastBookingByMember[mid] = d;
+      });
+      return Object.keys(lastBookingByMember).filter(function (id) { return lastBookingByMember[id] < sixMonthsAgo; });
+    }
+
+    default:
+      return [];
+  }
+}
+
+// ส่งแคมเปญให้กลุ่มลูกค้าที่กำหนด
+function sendCampaign(segment, messages) {
+  var ids = getMemberIdsBySegment(segment);
+  if (ids.length === 0) return { success: true, recipientCount: 0, note: 'ไม่พบสมาชิกที่ตรงกลุ่มนี้' };
+  var result = pushToMembers(ids, messages);
+  logAudit('admin', 'send_campaign', 'Segment:' + segment, null, { recipientCount: ids.length });
+  return result;
+}
+
 // ---------- DASHBOARD ----------
 
 function getDashboardData() {
-  var bookings = listBookings({});
+  var allBookings = listBookings({});
+  // ไม่นับงานที่ยกเลิกแล้วในสถิติ/รายการที่ต้องดำเนินการ (แต่ยังแสดงใน "กิจกรรมล่าสุด" เพื่อเก็บประวัติ)
+  var bookings = allBookings.filter(function (b) { return b.status !== 'cancelled'; });
   var today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -914,14 +1214,15 @@ function getDashboardData() {
     monthlyIncome: monthlyIncome,
     pendingDeposits: pendingDeposits,
     pendingDepositsCount: pendingDeposits.length,
-    recentActivities: bookings.sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); }).slice(0, 8)
+    recentActivities: allBookings.sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); }).slice(0, 8)
   };
 }
 
 // ---------- ANALYTICS ----------
 
 function getAnalytics(params) {
-  var bookings = listBookings({});
+  // ไม่นับงานที่ยกเลิกแล้วในสถิติรายได้/จำนวนงาน/ลูกค้า/จังหวัด
+  var bookings = listBookings({}).filter(function (b) { return b.status !== 'cancelled'; });
   var year = params.year ? Number(params.year) : new Date().getFullYear();
 
   var yearBookings = bookings.filter(function (b) { return new Date(b.date).getFullYear() === year; });
