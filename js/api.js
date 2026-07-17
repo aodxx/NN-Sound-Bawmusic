@@ -3,23 +3,28 @@
  * เชื่อมต่อกับ Google Apps Script Web App
  */
 
-// ⚠️ แก้ URL 'https Web App URL ของคุณหลัง Deploy Apps Script (ดู INSTALL.md)
-const API_URL = 'https://script.google.com/macros/s/AKfycbxkZ53Olropa7NNvFDpD3bHhVKlXlmjBVY-DQlpxSS2L6wSNXyFUZMDCaHBpNprpkpBDw/exec'
+// ⚠️ แก้ URL นี้เป็น Web App URL ของคุณหลัง Deploy Apps Script (ดู INSTALL.md)
+const API_URL = 'https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec';
+
+// ⚠️ ต้องตรงกับค่า Script Property "ADMIN_TOKEN" ที่ตั้งไว้ใน Apps Script (ดู INSTALL.md)
+// ใช้ยืนยันว่าเรียกมาจากแอปแอดมินจริง ป้องกันคนอื่นเรียก API ที่ไม่ใช่ public ได้
+const ADMIN_TOKEN = 'VTgklJroe0fIGje6K4GgAB1k5JqNNjzC';
 
 const BawmusicAPI = {
   async call(action, params = {}, isPost = false) {
     try {
+      const paramsWithAuth = { ...params, adminToken: ADMIN_TOKEN };
       let url = API_URL;
       let options = {};
 
       if (isPost) {
         options = {
           method: 'POST',
-          body: JSON.stringify({ action, ...params }),
+          body: JSON.stringify({ action, ...paramsWithAuth }),
           headers: { 'Content-Type': 'text/plain;charset=utf-8' }
         };
       } else {
-        const query = new URLSearchParams({ action, ...flattenParams(params) });
+        const query = new URLSearchParams({ action, ...flattenParams(paramsWithAuth) });
         url = `${API_URL}?${query.toString()}`;
       }
 
