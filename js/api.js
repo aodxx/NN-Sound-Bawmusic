@@ -9,7 +9,7 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbxkZ53Olropa7NNvFDpD3bH
 // ⚠️ ต้องตรงกับค่า Script Property "ADMIN_TOKEN" ที่ตั้งไว้ใน Apps Script (ดู INSTALL.md)
 // ใช้ยืนยันว่าเรียกมาจากแอปแอดมินจริง ป้องกันคนอื่นเรียก API ที่ไม่ใช่ public ได้
 // ตั้งเป็นข้อความสุ่มยาวๆ ของตัวเอง อย่าใช้ค่าตัวอย่างนี้ตรงๆ
-const ADMIN_TOKEN = 'CHANGE_ME_TO_A_LONG_RANDOM_SECRET';
+const ADMIN_TOKEN = 'pantipa112233445566778899';
 
 const BawmusicAPI = {
   async call(action, params = {}, isPost = false) {
