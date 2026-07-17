@@ -6,20 +6,26 @@
 // ⚠️ แก้ URL นี้เป็น Web App URL ของคุณหลัง Deploy Apps Script (ดู INSTALL.md)
 const API_URL = 'https://script.google.com/macros/s/AKfycbxkZ53Olropa7NNvFDpD3bHhVKlXlmjBVY-DQlpxSS2L6wSNXyFUZMDCaHBpNprpkpBDw/exec';
 
+// ⚠️ ต้องตรงกับค่า Script Property "ADMIN_TOKEN" ที่ตั้งไว้ใน Apps Script (ดู INSTALL.md)
+// ใช้ยืนยันว่าเรียกมาจากแอปแอดมินจริง ป้องกันคนอื่นเรียก API ที่ไม่ใช่ public ได้
+// ตั้งเป็นข้อความสุ่มยาวๆ ของตัวเอง อย่าใช้ค่าตัวอย่างนี้ตรงๆ
+const ADMIN_TOKEN = 'CHANGE_ME_TO_A_LONG_RANDOM_SECRET';
+
 const BawmusicAPI = {
   async call(action, params = {}, isPost = false) {
     try {
+      const paramsWithAuth = { ...params, adminToken: ADMIN_TOKEN };
       let url = API_URL;
       let options = {};
 
       if (isPost) {
         options = {
           method: 'POST',
-          body: JSON.stringify({ action, ...params }),
+          body: JSON.stringify({ action, ...paramsWithAuth }),
           headers: { 'Content-Type': 'text/plain;charset=utf-8' }
         };
       } else {
-        const query = new URLSearchParams({ action, ...flattenParams(params) });
+        const query = new URLSearchParams({ action, ...flattenParams(paramsWithAuth) });
         url = `${API_URL}?${query.toString()}`;
       }
 
