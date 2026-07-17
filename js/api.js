@@ -3,8 +3,8 @@
  * เชื่อมต่อกับ Google Apps Script Web App
  */
 
-// ⚠️ แก้ URL นี้เป็น Web App URL ของคุณหลัง Deploy Apps Script (ดู INSTALL.md)
-const API_URL = 'https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec';
+// ⚠️ แก้ URL 'https Web App URL ของคุณหลัง Deploy Apps Script (ดู INSTALL.md)
+const API_URL = 'https://script.google.com/macros/s/AKfycbxkZ53Olropa7NNvFDpD3bHhVKlXlmjBVY-DQlpxSS2L6wSNXyFUZMDCaHBpNprpkpBDw/exec'
 
 const BawmusicAPI = {
   async call(action, params = {}, isPost = false) {
