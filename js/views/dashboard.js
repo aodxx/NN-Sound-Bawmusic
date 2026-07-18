@@ -112,8 +112,9 @@ function jobCard(b) {
   return `
     <div class="bg-navy-light rounded-2xl p-3 mb-2 border border-gold/10 flex items-center gap-3 active:scale-[0.98] transition-transform cursor-pointer"
          onclick="window.openBookingForm('${b.id}')">
-      <div class="w-11 h-11 rounded-xl bg-navy flex flex-col items-center justify-center text-gold flex-shrink-0">
+      <div class="relative w-11 h-11 rounded-xl bg-navy flex flex-col items-center justify-center text-gold flex-shrink-0">
         <i class="fa-solid ${Utils.jobTypeIcon(b.jobType)} text-base"></i>
+        ${b.status === 'pending' ? '<span class="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-yellow-400 ring-2 ring-navy-light pulse-dot"></span>' : ''}
       </div>
       <div class="flex-1 min-w-0">
         <p class="text-base font-medium text-gray-100 truncate">${b.customerName}</p>
