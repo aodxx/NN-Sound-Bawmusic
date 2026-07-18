@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>จองคิว Bawmusic</title>
+<meta name="theme-color" content="#08080d">
+
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: { kanit: ['Kanit', 'sans-serif'] },
+        colors: {
+          navy: { DEFAULT: '#13131f', dark: '#08080d', light: '#1e1e30' },
+          gold: { DEFAULT: '#22d3ee', light: '#67e8f9', dark: '#0891b2' },
+          neon: { DEFAULT: '#f637ec', light: '#f9a8f4', dark: '#a21caf' }
+        }
+      }
+    }
+  }
+</script>
+<style>
+  [x-cloak], .hidden-init { display: none !important; }
+  * { -webkit-tap-highlight-color: transparent; }
+  body { overscroll-behavior-y: contain; }
+  @media (max-width: 768px) { input, textarea, select { font-size: 16px !important; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .bawmusic-spinner {
+    width: 2.5rem; height: 2.5rem;
+    border: 3px solid rgba(34, 211, 238, 0.2);
+    border-top-color: #22d3ee;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  .swal2-popup { border-radius: 1.25rem !important; font-family: 'Kanit', sans-serif !important; }
+  .swal2-input, .swal2-textarea, .swal2-select {
+    background: #08080d !important; border: 1px solid rgba(34,211,238,0.25) !important;
+    color: #fff !important; border-radius: 0.5rem !important; font-family: 'Kanit', sans-serif !important;
+  }
+</style>
+</head>
+<body class="font-kanit bg-navy-dark text-gray-100 min-h-screen">
+
+<!-- ===== LOADING ===== -->
+<div id="screen-loading" class="min-h-screen flex flex-col items-center justify-center px-6">
+  <div class="bawmusic-spinner mb-4"></div>
+  <p class="text-gray-400 text-sm" id="loading-text">กำลังเชื่อมต่อ LINE...</p>
+</div>
+
+<!-- ===== ERROR (เปิดนอกแอป LINE หรือ token ผิดพลาด) ===== -->
+<div id="screen-error" class="hidden-init min-h-screen flex flex-col items-center justify-center px-6 text-center">
+  <i class="fa-solid fa-triangle-exclamation text-4xl text-red-400 mb-4"></i>
+  <p class="text-gray-200 font-medium mb-2">เกิดข้อผิดพลาด</p>
+  <p class="text-gray-500 text-sm" id="error-text">กรุณาเปิดลิงก์นี้ผ่านแอป LINE</p>
+</div>
+
+<!-- ===== BOOKING FORM ===== -->
+<div id="screen-form" class="hidden-init min-h-screen pb-10">
+  <header class="bg-gradient-to-br from-gold to-neon px-5 pt-8 pb-6 rounded-b-3xl shadow-lg">
+    <div class="flex items-center gap-3 mb-1">
+      <img id="profile-pic" src="" class="w-12 h-12 rounded-full border-2 border-navy-dark/30 object-cover hidden-init">
+      <div>
+        <p class="text-navy-dark/70 text-sm font-medium">สวัสดีครับ/ค่ะ</p>
+        <p class="text-navy-dark text-lg font-bold" id="profile-name">ลูกค้า Bawmusic</p>
+      </div>
+    </div>
+    <p class="text-navy-dark/80 text-sm mt-2">กรอกข้อมูลเพื่อจองคิววง เราจะติดต่อกลับเพื่อยืนยันและแจ้งราคา</p>
+  </header>
+
+  <div class="px-4 -mt-3">
+    <div class="bg-navy-light rounded-2xl p-4 border border-gold/10 shadow-sm shadow-black/20 space-y-3.5">
+
+      <div>
+        <label class="text-sm text-gray-500 block mb-1">ชื่อ-นามสกุล</label>
+        <input id="field-customerName" type="text" placeholder="ชื่อผู้ติดต่อ"
+          class="w-full bg-navy border border-gold/10 rounded-lg px-3 py-3 text-base text-gray-100 focus:outline-none focus:border-gold/40">
+      </div>
+
+      <div>
+        <label class="text-sm text-gray-500 block mb-1">เบอร์โทรติดต่อกลับ</label>
+        <input id="field-phone" type="tel" placeholder="08X-XXX-XXXX"
+          class="w-full bg-navy border border-gold/10 rounded-lg px-3 py-3 text-base text-gray-100 focus:outline-none focus:border-gold/40">
+      </div>
+
+      <div>
+        <label class="text-sm text-gray-500 block mb-1">สถานที่จัดงาน</label>
+        <input id="field-venue" type="text" placeholder="ชื่อสถานที่ / ที่อยู่โดยย่อ"
+          class="w-full bg-navy border border-gold/10 rounded-lg px-3 py-3 text-base text-gray-100 focus:outline-none focus:border-gold/40">
+      </div>
+
+      <div>
+        <label class="text-sm text-gray-500 block mb-1">จังหวัด</label>
+        <select id="field-province" class="w-full bg-navy border border-gold/10 rounded-lg px-3 py-3 text-base text-gray-100 focus:outline-none focus:border-gold/40">
+          <option value="">เลือกจังหวัด</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="text-sm text-gray-500 block mb-1">วันที่จัดงาน</label>
+        <input id="field-date" type="date"
+          class="w-full bg-navy border border-gold/10 rounded-lg px-3 py-3 text-base text-gray-100 focus:outline-none focus:border-gold/40">
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-sm text-gray-500 block mb-1">เวลาเริ่ม</label>
+          <input id="field-startTime" type="time"
+            class="w-full bg-navy border border-gold/10 rounded-lg px-3 py-3 text-base text-gray-100 focus:outline-none focus:border-gold/40">
+        </div>
+        <div>
+          <label class="text-sm text-gray-500 block mb-1">เวลาสิ้นสุด</label>
+          <input id="field-endTime" type="time"
+            class="w-full bg-navy border border-gold/10 rounded-lg px-3 py-3 text-base text-gray-100 focus:outline-none focus:border-gold/40">
+        </div>
+      </div>
+
+      <div>
+        <label class="text-sm text-gray-500 block mb-1">ประเภทงาน</label>
+        <div class="grid grid-cols-4 gap-2" id="jobtype-grid"></div>
+      </div>
+
+      <div>
+        <label class="text-sm text-gray-500 block mb-1">รายละเอียดเพิ่มเติม</label>
+        <textarea id="field-remarks" rows="3" placeholder="เช่น จำนวนแขก, ความต้องการพิเศษ"
+          class="w-full bg-navy border border-gold/10 rounded-lg px-3 py-3 text-base text-gray-100 focus:outline-none focus:border-gold/40"></textarea>
+      </div>
+
+    </div>
+
+    <button id="btn-submit" onclick="submitBooking()"
+      class="w-full mt-4 bg-gradient-to-r from-gold to-neon text-navy-dark text-base font-bold rounded-2xl py-4 shadow-lg shadow-gold/30 active:scale-[0.98] transition-transform">
+      <i class="fa-solid fa-paper-plane mr-2"></i>ส่งคำขอจองคิว
+    </button>
+    <p class="text-center text-sm text-gray-500 mt-3">การจองนี้ยังไม่ใช่การยืนยันขั้นสุดท้าย ทางวงจะติดต่อกลับภายใน 24 ชม.</p>
+  </div>
+</div>
+
+<!-- ===== SUCCESS ===== -->
+<div id="screen-success" class="hidden-init min-h-screen flex flex-col items-center justify-center px-6 text-center">
+  <div class="w-20 h-20 rounded-full bg-gradient-to-br from-gold to-neon flex items-center justify-center mb-5">
+    <i class="fa-solid fa-check text-navy-dark text-3xl"></i>
+  </div>
+  <p class="text-xl font-bold text-gray-100 mb-2">ส่งคำขอจองคิวแล้ว!</p>
+  <p class="text-gray-400 text-sm mb-1">ทางวงได้รับข้อมูลของคุณเรียบร้อย</p>
+  <p class="text-gray-400 text-sm mb-6">จะติดต่อกลับเพื่อยืนยันและแจ้งราคาภายใน 24 ชั่วโมง</p>
+  <div class="bg-navy-light rounded-xl px-4 py-3 border border-gold/10 mb-6">
+    <p class="text-sm text-gray-500">รหัสอ้างอิงการจอง</p>
+    <p class="text-gold font-mono font-bold" id="success-token">-</p>
+  </div>
+  <button onclick="closeLiff()" class="bg-navy-light text-gray-200 text-base font-medium rounded-xl px-6 py-3 border border-gold/10">
+    <i class="fa-solid fa-arrow-left mr-2"></i>กลับไปที่ LINE
+  </button>
+</div>
+
+<script>
+  // ⚠️ แก้ URL นี้เป็น Web App URL เดียวกับที่ใช้ใน js/api.js ของแอปแอดมิน
+  const API_URL = 'https://script.google.com/macros/s/AKfycbykgZIfxTQ3652WNWaES0ZPWubbv62IlXYqgar27u-S8a0nNZ8yiinFj_BZd8Dg1ow5/exec';
+
+  // LIFF ID ของ Bawmusic (จาก LINE Developers Console)
+  const LIFF_ID = '2007938843-WTd19n2O';
+
+  const PROVINCES = [
+    'พัทลุง', 'สงขลา', 'นครศรีธรรมราช', 'ตรัง', 'สตูล', 'ปัตตานี', 'ยะลา', 'นราธิวาส',
+    'กระบี่', 'พังงา', 'ภูเก็ต', 'สุราษฎร์ธานี', 'ชุมพร', 'ระนอง'
+  ];
+
+  const JOB_TYPES = [
+    { value: 'Wedding', label: 'งานแต่ง', icon: 'fa-rings-wedding' },
+    { value: 'Ordination', label: 'งานบวช', icon: 'fa-om' },
+    { value: 'Funeral', label: 'งานศพ', icon: 'fa-fire-flame-simple' },
+    { value: 'Corporate', label: 'งานองค์กร', icon: 'fa-briefcase' },
+    { value: 'Birthday', label: 'วันเกิด', icon: 'fa-cake-candles' },
+    { value: 'Concert', label: 'คอนเสิร์ต', icon: 'fa-guitar' },
+    { value: 'Custom', label: 'อื่นๆ', icon: 'fa-star' }
+  ];
+
+  let selectedJobType = 'Wedding';
+  let idToken = null;
+  let liffProfile = null;
+
+  function showScreen(id) {
+    ['screen-loading', 'screen-error', 'screen-form', 'screen-success'].forEach(s => {
+      document.getElementById(s).classList.toggle('hidden-init', s !== id);
+    });
+  }
+
+  function showError(msg) {
+    document.getElementById('error-text').textContent = msg;
+    showScreen('screen-error');
+  }
+
+  function toast(icon, title) {
+    Swal.mixin({
+      toast: true, position: 'top', showConfirmButton: false, timer: 2200, timerProgressBar: true,
+      background: '#13131f', color: '#fff'
+    }).fire({ icon, title });
+  }
+
+  function initFormOptions() {
+    const provinceSelect = document.getElementById('field-province');
+    PROVINCES.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p; opt.textContent = p;
+      provinceSelect.appendChild(opt);
+    });
+
+    const grid = document.getElementById('jobtype-grid');
+    grid.innerHTML = JOB_TYPES.map(jt => `
+      <button type="button" onclick="setJobType('${jt.value}')" id="jt-${jt.value}"
+        class="flex flex-col items-center gap-1 py-3 rounded-xl border transition-colors ${jt.value === selectedJobType ? 'bg-gold/20 border-gold text-gold' : 'bg-navy border-gold/10 text-gray-400'}">
+        <i class="fa-solid ${jt.icon}"></i>
+        <span class="text-xs">${jt.label}</span>
+      </button>
+    `).join('');
+  }
+
+  function setJobType(value) {
+    selectedJobType = value;
+    JOB_TYPES.forEach(jt => {
+      const btn = document.getElementById('jt-' + jt.value);
+      btn.className = `flex flex-col items-center gap-1 py-3 rounded-xl border transition-colors ${jt.value === value ? 'bg-gold/20 border-gold text-gold' : 'bg-navy border-gold/10 text-gray-400'}`;
+    });
+  }
+
+  async function callApi(action, params = {}) {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action, ...params }),
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'API Error');
+    return json.data;
+  }
+
+  async function submitBooking() {
+    const data = {
+      customerName: document.getElementById('field-customerName').value.trim(),
+      phone: document.getElementById('field-phone').value.trim(),
+      venue: document.getElementById('field-venue').value.trim(),
+      province: document.getElementById('field-province').value,
+      date: document.getElementById('field-date').value,
+      startTime: document.getElementById('field-startTime').value,
+      endTime: document.getElementById('field-endTime').value,
+      jobType: selectedJobType,
+      remarks: document.getElementById('field-remarks').value.trim()
+    };
+
+    if (!data.customerName || !data.phone || !data.date) {
+      toast('error', 'กรุณากรอกชื่อ เบอร์โทร และวันที่จัดงาน');
+      return;
+    }
+
+    const btn = document.getElementById('btn-submit');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>กำลังส่ง...';
+
+    try {
+      const result = await callApi('submitLiffBooking', { idToken, data });
+      document.getElementById('success-token').textContent = result.bookingToken || result.id;
+      showScreen('screen-success');
+    } catch (err) {
+      toast('error', 'ส่งคำขอไม่สำเร็จ: ' + err.message);
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-paper-plane mr-2"></i>ส่งคำขอจองคิว';
+    }
+  }
+
+  function closeLiff() {
+    if (window.liff && liff.isInClient()) {
+      liff.closeWindow();
+    } else {
+      window.location.href = 'https://line.me';
+    }
+  }
+
+  async function init() {
+    initFormOptions();
+
+    if (API_URL.indexOf('YOUR_DEPLOYMENT_ID') !== -1) {
+      showError('ระบบยังไม่ได้ตั้งค่า API_URL — กรุณาติดต่อผู้ดูแลระบบ');
+      return;
+    }
+
+    try {
+      document.getElementById('loading-text').textContent = 'กำลังเชื่อมต่อ LINE...';
+      await liff.init({ liffId: LIFF_ID });
+
+      if (!liff.isLoggedIn()) {
+        liff.login();
+        return; // จะรีโหลดหน้าอัตโนมัติหลัง login
+      }
+
+      document.getElementById('loading-text').textContent = 'กำลังยืนยันตัวตน...';
+      idToken = liff.getIDToken();
+      if (!idToken) throw new Error('ไม่สามารถดึง ID Token จาก LINE ได้');
+
+      try {
+        liffProfile = await liff.getProfile();
+        document.getElementById('profile-name').textContent = liffProfile.displayName || 'ลูกค้า Bawmusic';
+        if (liffProfile.pictureUrl) {
+          const img = document.getElementById('profile-pic');
+          img.src = liffProfile.pictureUrl;
+          img.classList.remove('hidden-init');
+        }
+        document.getElementById('field-customerName').value = liffProfile.displayName || '';
+      } catch (profileErr) {
+        console.warn('getProfile failed (non-fatal):', profileErr);
+      }
+
+      // ยืนยันตัวตนกับ backend ล่วงหน้า เพื่อบันทึกสมาชิกไว้ก่อนกรอกฟอร์ม
+      document.getElementById('loading-text').textContent = 'กำลังเตรียมฟอร์มจอง...';
+      await callApi('verifyAndUpsertMember', { idToken });
+
+      showScreen('screen-form');
+    } catch (err) {
+      console.error('LIFF init failed:', err);
+      showError(err.message || 'ไม่สามารถเชื่อมต่อ LINE ได้ กรุณาเปิดลิงก์นี้ผ่านแอป LINE');
+    }
+  }
+
+  init();
+</script>
+</body>
+</html>
