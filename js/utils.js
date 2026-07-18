@@ -97,7 +97,9 @@ const Utils = {
       cancelled: '<span class="px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 text-base font-medium">ยกเลิก</span>',
       completed: '<span class="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 text-base font-medium">เสร็จสิ้น</span>'
     };
-    return map[status] || map.confirmed;
+    // ไม่รู้จักสถานะ (ว่าง/ผิดพลาด) ให้ถือว่า "รอยืนยัน" ไว้ก่อนเพื่อความปลอดภัย
+    // (ปลอดภัยกว่าเข้าใจผิดว่ายืนยันแล้วทั้งที่จริงยังไม่ได้ยืนยัน)
+    return map[status] || map.pending;
   },
 
   toast(icon, title) {
