@@ -395,7 +395,8 @@ async function resolveCustomerRecord() {
     existing = __bookingFormCustomers.find(c => c.id === s.customerId);
   }
   if (!existing && s.phone) {
-    existing = __bookingFormCustomers.find(c => c.phone && String(c.phone).trim() === String(s.phone).trim());
+    const inputPhone = String(s.phone).replace(/[^0-9]/g, '');
+    existing = __bookingFormCustomers.find(c => c.phone && String(c.phone).replace(/[^0-9]/g, '') === inputPhone);
   }
   if (!existing) {
     existing = __bookingFormCustomers.find(c => c.name && c.name.trim() === s.customerName.trim());
