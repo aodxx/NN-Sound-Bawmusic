@@ -80,6 +80,19 @@ function paintBookingForm(equipment, templates) {
 
     <div class="px-4 py-4 max-w-2xl mx-auto space-y-4 pb-10">
 
+      <!-- Booking Status -->
+      ${s.id ? `
+      <section class="bg-navy-light rounded-2xl p-4 border border-gold/10 shadow-sm shadow-black/5">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-base font-semibold text-gold"><i class="fa-solid fa-clipboard-check mr-1.5"></i>สถานะการจอง</h3>
+          ${Utils.statusBadge(s.status)}
+        </div>
+        <div class="grid grid-cols-2 gap-2" id="status-action-buttons">
+          ${statusActionButtons(s.status)}
+        </div>
+      </section>
+      ` : ''}
+
       <!-- Job Templates -->
       <div class="flex gap-2 overflow-x-auto pb-1">
         ${templates.map((t, i) => `
@@ -278,6 +291,73 @@ function setJobType(value) {
     const btn = document.getElementById('jobtype-' + jt.value);
     if (btn) btn.className = `flex flex-col items-center gap-1 py-3 rounded-xl border transition-colors ${jt.value === value ? 'bg-gold/20 border-gold text-gold' : 'bg-navy border-gold/10 text-gray-400'}`;
   });
+}
+
+// สร้างปุ่ม action ตามสถานะปัจจุบันของการจอง (มาตรฐาน: รอยืนยัน → ยืนยันแล้ว → เสร็จสิ้น, ยกเลิกได้ทุกขั้น)
+function statusActionButtons(status) {
+  const buttons = [];
+
+  if (status === 'pending') {
+    buttons.push(`<button onclick="changeBookingStatus('confirmed')" class="col-span-2 bg-green-500/15 border border-green-500/40 text-green-400 text-base font-semibold rounded-xl py-3">
+      <i class="fa-solid fa-check mr-1.5"></i>ยืนยันการจอง (ส่งแจ้งลูกค้าทาง LINE)
+    </button>`);
+    buttons.push(`<button onclick="changeBookingStatus('cancelled')" class="col-span-2 bg-red-500/10 border border-red-500/30 text-red-400 text-base font-medium rounded-xl py-2.5">
+      <i class="fa-solid fa-xmark mr-1.5"></i>ปฏิเสธ/ยกเลิกคำขอนี้
+    </button>`);
+  } else if (status === 'confirmed') {
+    buttons.push(`<button onclick="changeBookingStatus('completed')" class="bg-blue-500/15 border border-blue-500/40 text-blue-400 text-base font-medium rounded-xl py-2.5">
+      <i class="fa-solid fa-flag-checkered mr-1.5"></i>งานเสร็จสิ้นแล้ว
+    </button>`);
+    buttons.push(`<button onclick="changeBookingStatus('cancelled')" class="bg-red-500/10 border border-red-500/30 text-red-400 text-base font-medium rounded-xl py-2.5">
+      <i class="fa-solid fa-xmark mr-1.5"></i>ยกเลิกการจอง
+    </button>`);
+  } else if (status === 'completed') {
+    buttons.push(`<button onclick="changeBookingStatus('confirmed')" class="col-span-2 bg-navy border border-gold/20 text-gray-400 text-base font-medium rounded-xl py-2.5">
+      <i class="fa-solid fa-rotate-left mr-1.5"></i>เปลี่ยนกลับเป็น "ยืนยันแล้ว"
+    </button>`);
+  } else if (status === 'cancelled') {
+    buttons.push(`<button onclick="changeBookingStatus('pending')" class="col-span-2 bg-navy border border-gold/20 text-gray-400 text-base font-medium rounded-xl py-2.5">
+      <i class="fa-solid fa-rotate-left mr-1.5"></i>เปิดคำขอนี้อีกครั้ง (กลับเป็นรอยืนยัน)
+    </button>`);
+  }
+
+  return buttons.join('');
+}
+
+async function changeBookingStatus(newStatus) {
+  const s = __bookingFormState;
+  const labels = { confirmed: 'ยืนยันแล้ว', pending: 'รอยืนยัน', completed: 'เสร็จสิ้น', cancelled: 'ยกเลิก' };
+
+  // เตือนถ้าจะยืนยันการจองแต่ยังไม่ได้ใส่ราคา (ข้อความแจ้งลูกค้าจะดูไม่สมบูรณ์)
+  if (newStatus === 'confirmed' && (!s.price || Number(s.price) <= 0)) {
+    const proceed = await Utils.confirm(
+      'ยังไม่ได้ใส่ราคา',
+      'คุณยังไม่ได้กรอกราคาในส่วน "ราคาและมัดจำ" ด้านล่าง — ต้องการยืนยันโดยไม่ใส่ราคาเลยหรือไม่?',
+      'ยืนยันโดยไม่ใส่ราคา'
+    );
+    if (!proceed) return;
+  }
+
+  const confirmText = newStatus === 'confirmed'
+    ? 'ระบบจะส่งข้อความสรุปวันที่/ราคา/ยอดคงเหลือไปให้ลูกค้าทาง LINE โดยอัตโนมัติ (เฉพาะลูกค้าที่จองผ่าน LIFF เท่านั้น)'
+    : `เปลี่ยนสถานะเป็น "${labels[newStatus]}" ใช่หรือไม่?`;
+
+  const ok = await Utils.confirm(`เปลี่ยนสถานะเป็น "${labels[newStatus]}"?`, confirmText, 'ยืนยัน');
+  if (!ok) return;
+
+  s.status = newStatus;
+  Utils.loading('กำลังบันทึก...');
+  try {
+    await BawmusicAPI.updateBooking(s.id, { status: newStatus });
+    Utils.closeLoading();
+    Utils.toast('success', newStatus === 'confirmed' ? 'ยืนยันการจองแล้ว ส่งข้อความแจ้งลูกค้าเรียบร้อย' : `เปลี่ยนสถานะเป็น "${labels[newStatus]}" แล้ว`);
+    closeBookingForm();
+    if (window.__app.currentView === 'dashboard') renderDashboard();
+    if (window.__app.currentView === 'bookings') renderBookings();
+  } catch (err) {
+    Utils.closeLoading();
+    Utils.toast('error', 'เปลี่ยนสถานะไม่สำเร็จ: ' + err.message);
+  }
 }
 
 function toggleEquipment(name, checked) {
