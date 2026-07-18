@@ -38,7 +38,7 @@ function paintCustomers(list) {
 window.__searchCustomers = (query) => {
   const filtered = !query ? __customersCache : __customersCache.filter(c =>
     (c.name || '').toLowerCase().includes(query.toLowerCase()) ||
-    String(c.phone || '').includes(query) ||
+    String(c.phone || '').replace(/[^0-9]/g, '').includes(query.replace(/[^0-9]/g, '')) ||
     (c.line || '').toLowerCase().includes(query.toLowerCase())
   );
   document.getElementById('customers-list').innerHTML = filtered.length === 0 ?
@@ -55,7 +55,7 @@ function customerRow(c) {
           </div>
           <div>
             <p class="text-base font-medium text-gray-100">${c.name}</p>
-            <p class="text-base text-gray-500">${c.phone || '-'} ${c.line ? '· ' + c.line : ''}</p>
+            <p class="text-base text-gray-500">${Utils.formatPhone(c.phone)} ${c.line ? '· ' + c.line : ''}</p>
           </div>
         </div>
         <button onclick="window.__openCustomerForm('${c.id}')" class="text-gray-400 px-2"><i class="fa-solid fa-ellipsis-vertical"></i></button>
