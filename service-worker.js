@@ -3,7 +3,7 @@
  * Offline support + caching for app shell
  */
 
-const CACHE_NAME = 'bawmusic-v2.0.0';
+const CACHE_NAME = 'bawmusic-v2.1.0';
 const APP_SHELL = [
   './',
   './index.html',
