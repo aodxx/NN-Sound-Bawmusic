@@ -3,7 +3,9 @@
  * Offline support + caching for app shell
  */
 
-const CACHE_NAME = 'bawmusic-v2.2.0';
+// เพิ่มเลขเวอร์ชันทุกครั้งที่มีการปล่อยไฟล์หน้าเว็บชุดใหม่
+// เพื่อบังคับให้ Service Worker ดาวน์โหลด App Shell ล่าสุดและลบแคชเก่า
+const CACHE_NAME = 'bawmusic-v2.3.0';
 const APP_SHELL = [
   './',
   './index.html',
@@ -57,7 +59,28 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // App shell: cache-first strategy
+  // หน้า HTML ต้องตรวจเซิร์ฟเวอร์ก่อนเสมอ เพื่อไม่ให้ URL ปกติค้างหน้าเก่า
+  // หากออฟไลน์จึงค่อยใช้ index.html ที่เก็บไว้ในแคช
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, clone);
+              cache.put('./index.html', response.clone());
+            });
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request).then((cached) => cached || caches.match('./index.html')))
+    );
+    return;
+  }
+
+  // ไฟล์ CSS/JS/รูปภาพใช้แคชเพื่อเปิดออฟไลน์ และถูกแทนที่อัตโนมัติ
+  // เมื่อ CACHE_NAME เปลี่ยนในรุ่นถัดไป
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) return cached;
