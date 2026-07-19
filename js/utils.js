@@ -60,13 +60,6 @@ const Utils = {
     return num.toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' ฿';
   },
 
-  formatPhone(phone) {
-    const digits = String(phone || '').replace(/[^0-9]/g, '');
-    if (digits.length === 10 && digits[0] === '0') return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
-    if (digits.length === 11 && digits.startsWith('66')) return `0${digits.slice(2, 4)}-${digits.slice(4, 7)}-${digits.slice(7)}`;
-    return phone || '-';
-  },
-
   // แปลงวันที่แบบ date-only โดยไม่ให้ timezone ทำให้วันเลื่อน
   parseDate(dateValue) {
     if (dateValue === null || dateValue === undefined || dateValue === '') return null;

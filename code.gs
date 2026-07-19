@@ -318,25 +318,12 @@ function sheetToObjectsByKey(sheet, keyField) {
 function normalizeApiDate(fieldName, value) {
   if (!(value instanceof Date) || isNaN(value.getTime())) return value;
   var dateFields = ['date', 'createdAt', 'updatedAt', 'paymentDate', 'timestamp', 'lastActiveAt'];
-  var timeFields = ['startTime', 'endTime'];
-  if (timeFields.indexOf(fieldName) !== -1) {
-    var timeZone = Session.getScriptTimeZone() || 'Asia/Bangkok';
-    return Utilities.formatDate(value, timeZone, 'HH:mm');
-  }
   if (dateFields.indexOf(fieldName) === -1) return value;
   var timezone = Session.getScriptTimeZone() || 'Asia/Bangkok';
   if (fieldName === 'date') {
     return Utilities.formatDate(value, timezone, 'yyyy-MM-dd');
   }
   return Utilities.formatDate(value, timezone, "yyyy-MM-dd'T'HH:mm:ss");
-}
-
-// เก็บเบอร์โทรเป็นตัวเลขมาตรฐาน เพื่อค้นหา/โทรออกได้แม้ผู้ใช้กรอกติดกัน
-function normalizePhone(phone) {
-  if (phone === null || phone === undefined) return '';
-  var digits = String(phone).replace(/[^0-9]/g, '');
-  if (digits.indexOf('66') === 0 && digits.length === 11) digits = '0' + digits.substring(2);
-  return digits;
 }
 
 function findRowIndexById(sheet, id) {
@@ -402,7 +389,7 @@ function getCustomer(id) {
 function createCustomer(data, actorId) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAMES.CUSTOMERS);
   var id = genId();
-  sheet.appendRow([id, data.name, normalizePhone(data.phone), data.line || '', data.facebook || '', data.address || '', data.mapLink || '', data.notes || '', new Date(), data.memberId || '']);
+  sheet.appendRow([id, data.name, data.phone, data.line || '', data.facebook || '', data.address || '', data.mapLink || '', data.notes || '', new Date(), data.memberId || '']);
   logAudit(actorId, 'create_customer', 'Customer:' + id, null, data);
   return { id: id };
 }
@@ -412,7 +399,6 @@ function updateCustomer(id, data, actorId) {
   var rowIdx = findRowIndexById(sheet, id);
   if (rowIdx === -1) throw new Error('Customer not found');
   var before = getCustomer(id);
-  if (data.phone !== undefined) data.phone = normalizePhone(data.phone);
   var headers = getHeaders(sheet);
   headers.forEach(function (h, i) {
     if (data.hasOwnProperty(h) && h !== 'id') {
@@ -437,10 +423,9 @@ function searchCustomers(query) {
   var customers = listCustomers({});
   if (!query) return customers;
   query = query.toLowerCase();
-  var phoneQuery = normalizePhone(query);
   return customers.filter(function (c) {
     return (c.name && c.name.toLowerCase().indexOf(query) !== -1) ||
-           (c.phone && String(c.phone).indexOf(phoneQuery || query) !== -1) ||
+           (c.phone && String(c.phone).indexOf(query) !== -1) ||
            (c.line && c.line.toLowerCase().indexOf(query) !== -1);
   });
 }
@@ -496,7 +481,7 @@ function createBooking(data, actorId) {
   var token = genToken();
 
   sheet.appendRow([
-    id, data.customerId || '', data.customerName || '', normalizePhone(data.phone), data.line || '',
+    id, data.customerId || '', data.customerName || '', data.phone || '', data.line || '',
     data.venue || '', data.mapLink || '', data.province || '', data.date, data.startTime || '',
     data.endTime || '', data.jobType || '', data.package || '', price, deposit, remaining,
     data.remarks || '', JSON.stringify(data.equipment || []), data.status || 'confirmed',
@@ -512,7 +497,6 @@ function updateBooking(id, data, actorId) {
   if (rowIdx === -1) throw new Error('Booking not found');
 
   var before = getBooking(id);
-  if (data.phone !== undefined) data.phone = normalizePhone(data.phone);
   if (data.equipment) data.equipment = JSON.stringify(data.equipment);
   if (data.price !== undefined || data.deposit !== undefined) {
     var current = getBooking(id);
@@ -1219,8 +1203,10 @@ function sendCampaign(segment, messages) {
 
 function getDashboardData() {
   var allBookings = listBookings({});
-  // ไม่นับงานที่ยกเลิกแล้วในสถิติ/รายการที่ต้องดำเนินการ (แต่ยังแสดงใน "กิจกรรมล่าสุด" เพื่อเก็บประวัติ)
-  var bookings = allBookings.filter(function (b) { return b.status !== 'cancelled'; });
+  // Dashboard แสดงเฉพาะงานที่ยังต้องดำเนินการ งานเสร็จแล้วไปอยู่ในหน้า "ประวัติงาน"
+  // แต่ยังนับงานเสร็จแล้วในรายได้/จำนวนงานของเดือน และกิจกรรมล่าสุดได้ตามปกติ
+  var bookings = allBookings.filter(function (b) { return b.status !== 'cancelled' && b.status !== 'completed'; });
+  var reportBookings = allBookings.filter(function (b) { return b.status !== 'cancelled'; });
   var today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -1231,7 +1217,7 @@ function getDashboardData() {
 
   var upcoming = bookings.filter(function (b) { return new Date(b.date) > today; }).slice(0, 5);
 
-  var thisMonth = bookings.filter(function (b) {
+  var thisMonth = reportBookings.filter(function (b) {
     var d = new Date(b.date);
     return d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
   });
@@ -1246,6 +1232,7 @@ function getDashboardData() {
     monthlyIncome: monthlyIncome,
     pendingDeposits: pendingDeposits,
     pendingDepositsCount: pendingDeposits.length,
+    completedCount: allBookings.filter(function (b) { return b.status === 'completed'; }).length,
     recentActivities: allBookings.sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); }).slice(0, 8)
   };
 }

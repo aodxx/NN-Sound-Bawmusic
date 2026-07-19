@@ -25,6 +25,7 @@ function app() {
       customers: 'จัดการลูกค้า',
       equipment: 'คลังอุปกรณ์',
       analytics: 'สถิติและรายงาน',
+      history: 'ประวัติงานที่เสร็จสิ้นแล้ว',
       settings: 'ตั้งค่าระบบ'
     },
 
@@ -142,6 +143,7 @@ function app() {
         case 'customers': renderCustomers(); break;
         case 'equipment': renderEquipment(); break;
         case 'analytics': renderAnalytics(); break;
+        case 'history': renderHistory(); break;
         case 'settings': renderSettings(); break;
       }
     },
