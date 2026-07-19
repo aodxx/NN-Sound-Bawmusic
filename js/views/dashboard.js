@@ -101,6 +101,12 @@ async function renderDashboard() {
         </div>
       </section>
 
+      <button class="dashboard-history-link mb-5" onclick="window.__app.setView('history')">
+        <span class="dashboard-history-link-icon"><i class="fa-solid fa-box-archive"></i></span>
+        <span><strong>ประวัติงานที่เสร็จสิ้นแล้ว</strong><small>เก็บงานเก่าไว้ดูย้อนหลังและตรวจสอบรายได้</small></span>
+        <em>${data.completedCount || 0} งาน</em><i class="fa-solid fa-chevron-right"></i>
+      </button>
+
       ${data.pendingDepositsCount > 0 ? `
         <section class="dashboard-payment-panel mb-5">
           <div class="dashboard-payment-heading">

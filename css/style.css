@@ -127,6 +127,38 @@ body {
 .dashboard-activity-copy strong { color: #e2e8f0; font-size: .75rem; font-weight: 500; }
 .dashboard-activity-copy small { color: #64748b; font-size: .61rem; }
 
+.dashboard-history-link { width: 100%; padding: .8rem; display: flex; align-items: center; gap: .7rem; border: 1px solid rgba(34,211,238,.12); border-radius: 1.15rem; background: linear-gradient(145deg, rgba(30,30,48,.9), rgba(15,15,26,.96)); text-align: left; transition: transform .18s ease, border-color .18s ease; }
+.dashboard-history-link:active { transform: scale(.985); border-color: rgba(34,211,238,.35); }
+.dashboard-history-link-icon { width: 2.4rem; height: 2.4rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border-radius: .8rem; color: #67e8f9; background: rgba(34,211,238,.1); }
+.dashboard-history-link > span:nth-child(2) { min-width: 0; flex: 1; }
+.dashboard-history-link strong,.dashboard-history-link small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-history-link strong { color: #e2e8f0; font-size: .76rem; font-weight: 600; }
+.dashboard-history-link small { margin-top: .12rem; color: #64748b; font-size: .6rem; }
+.dashboard-history-link em { color: #67e8f9; font-size: .68rem; font-style: normal; white-space: nowrap; }
+.dashboard-history-link > i { color: #475569; font-size: .62rem; }
+.dashboard-history-head { padding: 1.25rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; overflow: hidden; border: 1px solid rgba(34,211,238,.16); border-radius: 1.4rem; background: radial-gradient(circle at 85% 30%, rgba(246,55,236,.16), transparent 35%), linear-gradient(145deg, rgba(30,30,48,.95), rgba(10,10,18,.98)); }
+.dashboard-history-head h2 { margin-top: .35rem; color: #fff; font: 700 1.25rem/1.15 'Prompt', sans-serif; }
+.dashboard-history-head > div > p:last-child { margin-top: .4rem; color: #94a3b8; font-size: .68rem; }
+.dashboard-history-head > span { width: 3.4rem; height: 3.4rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border-radius: 1.1rem; color: #08080d; background: linear-gradient(135deg,#67e8f9,#f637ec); font-size: 1.3rem; }
+.history-summary-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .7rem; }
+.history-summary-grid > div { padding: .9rem; border: 1px solid rgba(34,211,238,.1); border-radius: 1.1rem; background: rgba(30,30,48,.7); }
+.history-summary-grid small,.history-summary-grid em { display: block; color: #94a3b8; font-size: .63rem; font-style: normal; }
+.history-summary-grid strong { display: block; margin-top: .2rem; color: #67e8f9; font: 700 1.15rem/1.15 'Prompt', sans-serif; }
+.history-toolbar { display: grid; grid-template-columns: 1fr auto; gap: .6rem; }
+.history-toolbar label,.history-toolbar select { min-height: 2.75rem; display: flex; align-items: center; border: 1px solid rgba(34,211,238,.12); border-radius: .9rem; background: rgba(30,30,48,.85); }
+.history-toolbar label { gap: .55rem; padding: 0 .8rem; color: #64748b; }
+.history-toolbar input,.history-toolbar select { width: 100%; color: #e2e8f0; background: transparent; outline: none; font-size: .75rem; }
+.history-toolbar select { width: auto; min-width: 5.7rem; padding: 0 .65rem; }
+.history-job-price { text-align: right; flex-shrink: 0; }
+.history-job-price strong { display: block; color: #67e8f9; font-size: .72rem; }
+.history-job-price small { display: block; margin-top: .2rem; color: #34d399; font-size: .58rem; white-space: nowrap; }
+[data-theme="light"] .dashboard-history-link,
+[data-theme="light"] .history-summary-grid > div,
+[data-theme="light"] .history-toolbar label,
+[data-theme="light"] .history-toolbar select { background: linear-gradient(145deg,#ffffff,#f8f7ff); border-color: rgba(124,58,237,.12); }
+[data-theme="light"] .dashboard-history-link strong,
+[data-theme="light"] .dashboard-history-head h2 { color: #201c33; }
+
 @media (min-width: 520px) {
   .dashboard-hero,.dashboard-hero-content { min-height: 21rem; }
   .dashboard-actions { gap: .75rem; }
