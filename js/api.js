@@ -6,8 +6,6 @@
 // ⚠️ แก้ URL นี้เป็น Web App URL ของคุณหลัง Deploy Apps Script (ดู INSTALL.md)
 const API_URL = 'https://script.google.com/macros/s/AKfycbykgZIfxTQ3652WNWaES0ZPWubbv62IlXYqgar27u-S8a0nNZ8yiinFj_BZd8Dg1ow5/exec';
 
-// ⚠️ ต้องตรงกับค่า Script Property "ADMIN_TOKEN" ที่ตั้งไว้ใน Apps Script (ดู INSTALL.md)
-// ใช้ยืนยันว่าเรียกมาจากแอปแอดมินจริง ป้องกันคนอื่นเรียก API ที่ไม่ใช่ public ได้
 const GOOGLE_CLIENT_ID = '173827802086-hhiicdrer9uefbhrof0laioddoabmdmb.apps.googleusercontent.com';
 const AUTH_STORAGE_KEY = 'bawmusic_google_id_token';
 
@@ -58,9 +56,17 @@ const BawmusicAPI = {
     if (!gate) throw new Error('ไม่พบหน้าล็อกอิน');
     gate.classList.remove('hidden-init');
     await new Promise((resolve) => {
-      if (!window.google || !google.accounts || !google.accounts.id) { document.getElementById('auth-error').textContent = 'โหลด Google Sign-In ไม่สำเร็จ กรุณารีเฟรชหน้าเว็บ'; return; }
-      google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: (response) => { BawmusicAPI.setGoogleIdToken(response.credential); gate.classList.add('hidden-init'); resolve(); window.location.reload(); } });
-      google.accounts.id.renderButton(document.getElementById('google-signin-button'), { theme: 'filled_black', size: 'large', width: 280, text: 'signin_with' });
+      const start = Date.now();
+      const render = () => {
+        if (window.google?.accounts?.id) {
+          google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: (response) => { BawmusicAPI.setGoogleIdToken(response.credential); gate.classList.add('hidden-init'); resolve(); window.location.reload(); } });
+          google.accounts.id.renderButton(document.getElementById('google-signin-button'), { theme: 'filled_black', size: 'large', width: 280, text: 'signin_with' });
+          return;
+        }
+        if (Date.now() - start < 15000) { setTimeout(render, 150); return; }
+        document.getElementById('auth-error').textContent = 'โหลด Google Sign-In ไม่สำเร็จ กรุณารีเฟรชหน้าเว็บ';
+      };
+      render();
     });
     return true;
   },
