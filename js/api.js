@@ -8,12 +8,15 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbykgZIfxTQ3652WNWaES0ZP
 
 // ⚠️ ต้องตรงกับค่า Script Property "ADMIN_TOKEN" ที่ตั้งไว้ใน Apps Script (ดู INSTALL.md)
 // ใช้ยืนยันว่าเรียกมาจากแอปแอดมินจริง ป้องกันคนอื่นเรียก API ที่ไม่ใช่ public ได้
-const ADMIN_TOKEN = 'VTgklJroe0fIGje6K4GgAB1k5JqNNjzC';
+const GOOGLE_CLIENT_ID = '173827802086-hhiicdrer9uefbhrof0laioddoabmdmb.apps.googleusercontent.com';
+const AUTH_STORAGE_KEY = 'bawmusic_google_id_token';
 
 const BawmusicAPI = {
   async call(action, params = {}, isPost = false) {
     try {
-      const paramsWithAuth = { ...params, adminToken: ADMIN_TOKEN };
+      const paramsWithAuth = { ...params };
+      const token = BawmusicAPI.getGoogleIdToken();
+      if (token) paramsWithAuth.googleIdToken = token;
       let url = API_URL;
       let options = {};
 
@@ -37,6 +40,29 @@ const BawmusicAPI = {
       console.error(`API call failed [${action}]:`, err);
       throw err;
     }
+  },
+
+  getGoogleIdToken() {
+    const token = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!token) return '';
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      if (!payload.exp || payload.exp * 1000 <= Date.now()) { localStorage.removeItem(AUTH_STORAGE_KEY); return ''; }
+    } catch (e) { localStorage.removeItem(AUTH_STORAGE_KEY); return ''; }
+    return token;
+  },
+  setGoogleIdToken(token) { if (token) localStorage.setItem(AUTH_STORAGE_KEY, token); else localStorage.removeItem(AUTH_STORAGE_KEY); },
+  async requireAuth() {
+    if (BawmusicAPI.getGoogleIdToken()) return true;
+    const gate = document.getElementById('auth-gate');
+    if (!gate) throw new Error('ไม่พบหน้าล็อกอิน');
+    gate.classList.remove('hidden-init');
+    await new Promise((resolve) => {
+      if (!window.google || !google.accounts || !google.accounts.id) { document.getElementById('auth-error').textContent = 'โหลด Google Sign-In ไม่สำเร็จ กรุณารีเฟรชหน้าเว็บ'; return; }
+      google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: (response) => { BawmusicAPI.setGoogleIdToken(response.credential); gate.classList.add('hidden-init'); resolve(); window.location.reload(); } });
+      google.accounts.id.renderButton(document.getElementById('google-signin-button'), { theme: 'filled_black', size: 'large', width: 280, text: 'signin_with' });
+    });
+    return true;
   },
 
   // Dashboard
@@ -70,6 +96,10 @@ const BawmusicAPI = {
   // Settings
   getSettings: () => BawmusicAPI.call('getSettings', {}, true),
   updateSettings: (data) => BawmusicAPI.call('updateSettings', { data }, true),
+
+  // Payments
+  listPayments: (bookingId) => BawmusicAPI.call('listPayments', { bookingId }, true),
+  createPayment: (data) => BawmusicAPI.call('createPayment', { data }, true),
 
   // Analytics
   getAnalytics: (params = {}) => BawmusicAPI.call('getAnalytics', params, true)
