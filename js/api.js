@@ -44,10 +44,6 @@ const BawmusicAPI = {
   getSessionToken() {
     const token = localStorage.getItem(AUTH_STORAGE_KEY);
     if (!token) return '';
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-      if (!payload.exp || payload.exp * 1000 <= Date.now()) { localStorage.removeItem(AUTH_STORAGE_KEY); return ''; }
-    } catch (e) { localStorage.removeItem(AUTH_STORAGE_KEY); return ''; }
     return token;
   },
   setSessionToken(token) { if (token) localStorage.setItem(AUTH_STORAGE_KEY, token); else localStorage.removeItem(AUTH_STORAGE_KEY); },
@@ -66,7 +62,9 @@ const BawmusicAPI = {
       error.textContent = '';
       status.textContent = 'กำลังตรวจสอบรหัส...';
       submitButton.disabled = true;
-      BawmusicAPI.call('createSession', { accessCode: button.value.trim() }, true)
+      // ใช้ GET เฉพาะขั้นตอนสร้าง session เพราะ Apps Script Web App
+      // อาจ redirect คำขอ POST ระหว่างโดเมน ทำให้ body หายบนบางเบราว์เซอร์
+      BawmusicAPI.call('createSession', { accessCode: button.value.trim() }, false)
         .then(data => { BawmusicAPI.setSessionToken(data.sessionToken); status.textContent = 'เข้าสู่ระบบสำเร็จ กำลังเปิดระบบ...'; gate.classList.add('hidden-init'); window.location.reload(); })
         .catch(e => { status.textContent = ''; error.textContent = e.message || 'ไม่สามารถเชื่อมต่อระบบได้'; submitButton.disabled = false; });
     };
