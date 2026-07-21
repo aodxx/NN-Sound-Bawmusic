@@ -48,9 +48,12 @@ const BawmusicAPI = {
   },
   setSessionToken(token) { if (token) localStorage.setItem(AUTH_STORAGE_KEY, token); else localStorage.removeItem(AUTH_STORAGE_KEY); },
   async requireAuth() {
-    if (BawmusicAPI.getSessionToken()) return true;
     const gate = document.getElementById('auth-gate');
     if (!gate) throw new Error('ไม่พบหน้าล็อกอิน');
+    if (BawmusicAPI.getSessionToken()) {
+      gate.classList.add('hidden-init');
+      return true;
+    }
     gate.classList.remove('hidden-init');
     const button = document.getElementById('access-code');
     const error = document.getElementById('auth-error');
