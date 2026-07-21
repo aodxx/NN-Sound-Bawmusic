@@ -58,8 +58,18 @@ const BawmusicAPI = {
     gate.classList.remove('hidden-init');
     const button = document.getElementById('access-code');
     const error = document.getElementById('auth-error');
+    const status = document.getElementById('auth-status');
+    const submitButton = document.getElementById('access-submit');
     if (error) error.textContent = '';
-    const submit = () => BawmusicAPI.call('createSession', { accessCode: button.value }, true).then(data => { BawmusicAPI.setSessionToken(data.sessionToken); gate.classList.add('hidden-init'); window.location.reload(); }).catch(e => { error.textContent = e.message; });
+    const submit = () => {
+      if (!button.value.trim()) { error.textContent = 'กรุณากรอกรหัสเข้าใช้งาน'; return; }
+      error.textContent = '';
+      status.textContent = 'กำลังตรวจสอบรหัส...';
+      submitButton.disabled = true;
+      BawmusicAPI.call('createSession', { accessCode: button.value.trim() }, true)
+        .then(data => { BawmusicAPI.setSessionToken(data.sessionToken); status.textContent = 'เข้าสู่ระบบสำเร็จ กำลังเปิดระบบ...'; gate.classList.add('hidden-init'); window.location.reload(); })
+        .catch(e => { status.textContent = ''; error.textContent = e.message || 'ไม่สามารถเชื่อมต่อระบบได้'; submitButton.disabled = false; });
+    };
     document.getElementById('access-submit').onclick = submit;
     button.onkeydown = e => { if (e.key === 'Enter') submit(); };
     return true;
