@@ -5,13 +5,13 @@
 
 // เพิ่มเลขเวอร์ชันทุกครั้งที่มีการปล่อยไฟล์หน้าเว็บชุดใหม่
 // เพื่อบังคับให้ Service Worker ดาวน์โหลด App Shell ล่าสุดและลบแคชเก่า
-const CACHE_NAME = 'bawmusic-v2.6.1';
+const CACHE_NAME = 'bawmusic-v2.6.2';
 const APP_SHELL = [
   './',
   './index.html',
   './manifest.json',
   './css/style.css',
-  './js/api.js?v=2.6.1',
+  './js/api.js?v=2.6.2',
   './js/utils.js',
   './js/app.js',
   './js/views/dashboard.js',
