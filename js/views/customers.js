@@ -45,18 +45,49 @@ window.__searchCustomers = (query) => {
     emptyState('ไม่พบลูกค้าที่ค้นหา', 'fa-user-slash') : filtered.map(customerRow).join('');
 };
 
+function escapeCustomerHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+}
+
+window.__handleCustomerImageError = (img) => {
+  const fallback = img.getAttribute('data-fallback-src');
+  if (fallback) {
+    img.removeAttribute('data-fallback-src');
+    img.src = fallback;
+    return;
+  }
+  img.style.display = 'none';
+  if (img.nextElementSibling) img.nextElementSibling.style.display = 'flex';
+};
+
+function customerAvatarMarkup(c, profile) {
+  const primary = String(profile?.pictureUrl || '').trim();
+  const fallback = String(profile?.fallbackPictureUrl || '').trim();
+  const src = primary || fallback;
+  const initial = escapeCustomerHtml((c.name || '?').charAt(0));
+  if (!src) return `<span class="customer-avatar-fallback">${initial}</span>`;
+
+  const fallbackAttr = primary && fallback
+    ? ` data-fallback-src="${escapeCustomerHtml(fallback)}"`
+    : '';
+  return `
+    <img src="${escapeCustomerHtml(src)}" alt="${escapeCustomerHtml(profile?.displayName || c.name || 'ลูกค้า')}" class="customer-avatar-image" loading="lazy"${fallbackAttr}
+      onerror="window.__handleCustomerImageError(this)">
+    <span class="customer-avatar-fallback" style="display:none">${initial}</span>
+  `;
+}
+
 function customerRow(c) {
   const profile = c.lineProfile || null;
-  const profileImage = profile && profile.pictureUrl ? `
-    <img src="${profile.pictureUrl}" alt="${profile.displayName || c.name || 'ลูกค้า'}" class="customer-avatar-image" loading="lazy"
-      onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-    <span class="customer-avatar-fallback" style="display:none">${(c.name || '?').charAt(0)}</span>
-  ` : `<span class="customer-avatar-fallback">${(c.name || '?').charAt(0)}</span>`;
+  const hasProfileImage = Boolean(profile && (profile.pictureUrl || profile.fallbackPictureUrl));
+  const profileImage = customerAvatarMarkup(c, profile);
   return `
     <div class="bg-navy-light rounded-2xl p-3.5 border border-gold/10 shadow-sm shadow-black/5">
       <div class="flex items-center justify-between mb-2">
         <div class="flex items-center gap-2.5">
-          <div class="customer-avatar ${profile && profile.pictureUrl ? 'customer-avatar-line' : ''}">${profileImage}</div>
+          <div class="customer-avatar ${hasProfileImage ? 'customer-avatar-line' : ''}">${profileImage}</div>
           <div>
             <p class="text-base font-medium text-gray-100">${c.name}</p>
             <p class="text-base text-gray-500">${Utils.formatPhone(c.phone)} ${c.line ? '· ' + c.line : ''}</p>
