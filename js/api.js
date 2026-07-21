@@ -8,15 +8,14 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbykgZIfxTQ3652WNWaES0ZP
 
 // ⚠️ ต้องตรงกับค่า Script Property "ADMIN_TOKEN" ที่ตั้งไว้ใน Apps Script (ดู INSTALL.md)
 // ใช้ยืนยันว่าเรียกมาจากแอปแอดมินจริง ป้องกันคนอื่นเรียก API ที่ไม่ใช่ public ได้
-const GOOGLE_CLIENT_ID = '173827802086-hhiicdrer9uefbhrof0laioddoabmdmb.apps.googleusercontent.com';
-const AUTH_STORAGE_KEY = 'bawmusic_google_id_token';
+const AUTH_STORAGE_KEY = 'bawmusic_session_token';
 
 const BawmusicAPI = {
   async call(action, params = {}, isPost = false) {
     try {
       const paramsWithAuth = { ...params };
-      const token = BawmusicAPI.getGoogleIdToken();
-      if (token) paramsWithAuth.googleIdToken = token;
+      const token = BawmusicAPI.getSessionToken();
+      if (token) paramsWithAuth.sessionToken = token;
       let url = API_URL;
       let options = {};
 
@@ -42,7 +41,7 @@ const BawmusicAPI = {
     }
   },
 
-  getGoogleIdToken() {
+  getSessionToken() {
     const token = localStorage.getItem(AUTH_STORAGE_KEY);
     if (!token) return '';
     try {
@@ -51,48 +50,18 @@ const BawmusicAPI = {
     } catch (e) { localStorage.removeItem(AUTH_STORAGE_KEY); return ''; }
     return token;
   },
-  setGoogleIdToken(token) { if (token) localStorage.setItem(AUTH_STORAGE_KEY, token); else localStorage.removeItem(AUTH_STORAGE_KEY); },
+  setSessionToken(token) { if (token) localStorage.setItem(AUTH_STORAGE_KEY, token); else localStorage.removeItem(AUTH_STORAGE_KEY); },
   async requireAuth() {
-    if (BawmusicAPI.getGoogleIdToken()) return true;
+    if (BawmusicAPI.getSessionToken()) return true;
     const gate = document.getElementById('auth-gate');
     if (!gate) throw new Error('ไม่พบหน้าล็อกอิน');
     gate.classList.remove('hidden-init');
-    const button = document.getElementById('google-signin-button');
+    const button = document.getElementById('access-code');
     const error = document.getElementById('auth-error');
-    const retry = document.getElementById('auth-retry');
-    if (button) button.innerHTML = '';
-    if (error) error.textContent = 'กำลังโหลดปุ่มเข้าสู่ระบบ...';
-    if (retry) retry.classList.add('hidden');
-
-    // Google Identity Services ถูกโหลดแบบ async/defer จึงอาจยังไม่พร้อม
-    // ในจังหวะที่ Alpine เรียก init() ครั้งแรก
-    await new Promise((resolve) => {
-      const startedAt = Date.now();
-      const waitForGoogle = () => {
-        if (window.google && google.accounts && google.accounts.id) {
-          google.accounts.id.initialize({
-            client_id: GOOGLE_CLIENT_ID,
-            callback: (response) => {
-              BawmusicAPI.setGoogleIdToken(response.credential);
-              gate.classList.add('hidden-init');
-              resolve();
-              window.location.reload();
-            }
-          });
-          google.accounts.id.renderButton(button, { theme: 'filled_black', size: 'large', width: 280, text: 'signin_with' });
-          if (error) error.textContent = '';
-          return;
-        }
-        if (Date.now() - startedAt >= 10000) {
-          if (error) error.textContent = 'โหลด Google Sign-In ไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตหรือเปิดหน้านี้ใน Chrome';
-          if (retry) retry.classList.remove('hidden');
-          resolve();
-          return;
-        }
-        window.setTimeout(waitForGoogle, 200);
-      };
-      waitForGoogle();
-    });
+    if (error) error.textContent = '';
+    const submit = () => BawmusicAPI.call('createSession', { accessCode: button.value }, true).then(data => { BawmusicAPI.setSessionToken(data.sessionToken); gate.classList.add('hidden-init'); window.location.reload(); }).catch(e => { error.textContent = e.message; });
+    document.getElementById('access-submit').onclick = submit;
+    button.onkeydown = e => { if (e.key === 'Enter') submit(); };
     return true;
   },
 
