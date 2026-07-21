@@ -402,10 +402,14 @@ function listCustomers(params) {
 
   customers.forEach(function (c) {
     var lineMember = c.memberId ? membersById[c.memberId] : null;
+    var fallbackPictureUrl = lineMember && lineMember.profileDriveFileId
+      ? driveImageDataUrl_(lineMember.profileDriveFileId)
+      : '';
     c.lineProfile = lineMember ? {
       lineUserId: lineMember.lineUserId,
       displayName: lineMember.displayName || '',
       pictureUrl: lineMember.pictureUrl || '',
+      fallbackPictureUrl: fallbackPictureUrl,
       isFriend: lineMember.isFriend,
       isBlocked: lineMember.isBlocked
     } : null;
@@ -743,6 +747,32 @@ function requireDriveFolderId_(config, key, propertyName) {
     throw new Error('ยังไม่ได้ตั้งค่า ' + propertyName + ' ใน Script Properties ของ Apps Script');
   }
   return folderId;
+}
+
+function authorizeDriveAccess() {
+  var config = getDriveConfig_();
+  var equipmentFolder = DriveApp.getFolderById(requireDriveFolderId_(config, 'equipmentFolderId', 'DRIVE_EQUIPMENT_FOLDER_ID'));
+  var profileFolder = DriveApp.getFolderById(requireDriveFolderId_(config, 'profileBackupFolderId', 'DRIVE_PROFILE_BACKUP_FOLDER_ID'));
+  return {
+    authorized: true,
+    equipmentFolder: equipmentFolder.getName(),
+    profileBackupFolder: profileFolder.getName()
+  };
+}
+
+// ส่งสำเนารูปจากโฟลเดอร์สำรองกลับไปยังหน้าแอดมินแบบ data URL
+// ใช้เฉพาะใน API ที่ต้องมี session แอดมิน จึงไม่เปิดไฟล์สำรองเป็นสาธารณะ
+function driveImageDataUrl_(fileId) {
+  if (!fileId) return '';
+  try {
+    var blob = DriveApp.getFileById(fileId).getBlob();
+    var contentType = String(blob.getContentType() || 'image/jpeg').toLowerCase();
+    if (contentType.indexOf('image/') !== 0) return '';
+    return 'data:' + contentType + ';base64,' + Utilities.base64Encode(blob.getBytes());
+  } catch (e) {
+    Logger.log('driveImageDataUrl failed: ' + e.message);
+    return '';
+  }
 }
 
 function driveImageUrl_(fileId) {

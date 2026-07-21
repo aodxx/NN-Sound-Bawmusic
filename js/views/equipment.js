@@ -186,7 +186,10 @@ window.__openEquipmentForm = async (id) => {
     renderEquipment();
   } catch (err) {
     Utils.closeLoading();
-    const detail = err && err.message ? err.message : 'ไม่ทราบสาเหตุ';
+    const rawDetail = err && err.message ? err.message : 'ไม่ทราบสาเหตุ';
+    const detail = /DriveApp\\.getFolderById|You do not have permission to call DriveApp/i.test(rawDetail)
+      ? 'Apps Script ยังไม่ได้รับอนุญาตให้ใช้ Google Drive กรุณาเปิด Apps Script แล้วรัน authorizeDriveAccess() จากบัญชีที่ใช้ Deploy'
+      : rawDetail;
     Utils.toast('error', imageFile ? `อัปโหลดรูปไม่สำเร็จ: ${detail}` : `บันทึกไม่สำเร็จ: ${detail}`);
   }
 };
