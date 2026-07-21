@@ -167,10 +167,10 @@ window.__openEquipmentForm = async (id) => {
 
   if (!formValues || !formValues.name) return;
 
+  const imageFile = formValues.imageFile;
+  delete formValues.imageFile;
   Utils.loading('กำลังบันทึก...');
   try {
-    const imageFile = formValues.imageFile;
-    delete formValues.imageFile;
     const saved = existing
       ? await BawmusicAPI.updateEquipment(existing.id, formValues)
       : await BawmusicAPI.createEquipment(formValues);
@@ -186,6 +186,7 @@ window.__openEquipmentForm = async (id) => {
     renderEquipment();
   } catch (err) {
     Utils.closeLoading();
-    Utils.toast('error', 'เกิดข้อผิดพลาด');
+    const detail = err && err.message ? err.message : 'ไม่ทราบสาเหตุ';
+    Utils.toast('error', imageFile ? `อัปโหลดรูปไม่สำเร็จ: ${detail}` : `บันทึกไม่สำเร็จ: ${detail}`);
   }
 };

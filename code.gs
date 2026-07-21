@@ -699,7 +699,12 @@ function uploadEquipmentImage(data) {
 
   var fileName = sanitizeDriveFileName_(data.fileName || ('equipment-' + equipment.id + extensionForMime_(mimeType)));
   var blob = Utilities.newBlob(Utilities.base64Decode(rawBase64), mimeType, fileName);
-  var folder = DriveApp.getFolderById(getDriveConfig_().equipmentFolderId);
+  var folder;
+  try {
+    folder = DriveApp.getFolderById(getDriveConfig_().equipmentFolderId);
+  } catch (driveError) {
+    throw new Error('เข้าถึงโฟลเดอร์ Google Drive สำหรับอุปกรณ์ไม่ได้ กรุณาตรวจสอบสิทธิ์ของบัญชีที่ Deploy Apps Script: ' + driveError.message);
+  }
   var file = folder.createFile(blob);
 
   try {
