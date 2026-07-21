@@ -170,7 +170,7 @@
 <!-- Toast container handled by SweetAlert2 -->
 
 <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-<script src="js/api.js?v=2.6.1"></script>
+<script src="js/api.js?v=2.6.2"></script>
 <script src="js/utils.js"></script>
 <script>
   // ดักจับ error ที่ไม่ถูกจัดการทั้งหมด แสดงผลให้เห็นแทนหน้าจอขาวเงียบๆ
@@ -201,7 +201,7 @@
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {
-      navigator.serviceWorker.register('service-worker.js?v=2.6.1').catch(function (e) { console.warn('SW registration failed', e); });
+      navigator.serviceWorker.register('service-worker.js?v=2.6.2').catch(function (e) { console.warn('SW registration failed', e); });
     });
   }
 </script>
