@@ -371,8 +371,21 @@ function listCustomers(params) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAMES.CUSTOMERS);
   var customers = sheetToObjects(sheet);
   var bookings = sheetToObjects(SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAMES.BOOKINGS));
+  var members = listMembers();
+  var membersById = {};
+  members.forEach(function (member) {
+    if (member.lineUserId) membersById[member.lineUserId] = member;
+  });
 
   customers.forEach(function (c) {
+    var lineMember = c.memberId ? membersById[c.memberId] : null;
+    c.lineProfile = lineMember ? {
+      lineUserId: lineMember.lineUserId,
+      displayName: lineMember.displayName || '',
+      pictureUrl: lineMember.pictureUrl || '',
+      isFriend: lineMember.isFriend,
+      isBlocked: lineMember.isBlocked
+    } : null;
     var custBookings = bookings.filter(function (b) { return b.customerId === c.id; });
     c.totalBookings = custBookings.length;
     c.totalRevenue = custBookings.reduce(function (sum, b) { return sum + (Number(b.price) || 0); }, 0);
