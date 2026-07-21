@@ -74,15 +74,28 @@ function equipmentRow(e) {
   const lowStock = qty <= 1;
   return `
     <div class="bg-navy-light rounded-xl p-4 border border-gold/10 flex items-center justify-between active:scale-[0.98] transition-transform cursor-pointer" onclick="window.__openEquipmentForm('${e.id}')">
-      <div>
-        <p class="text-base text-gray-100 font-semibold">${e.name}</p>
-        ${e.remarks ? `<p class="text-sm text-gray-500 mt-0.5">${e.remarks}</p>` : ''}
+      <div class="flex items-center gap-3 min-w-0">
+        ${equipmentImageMarkup(e)}
+        <div class="min-w-0">
+          <p class="text-base text-gray-100 font-semibold truncate">${e.name}</p>
+          ${e.remarks ? `<p class="text-sm text-gray-500 mt-0.5 truncate">${e.remarks}</p>` : ''}
+        </div>
       </div>
       <div class="text-right">
         <p class="text-lg font-bold ${lowStock ? 'text-red-400' : 'text-gold'}">${qty} ${e.unit || ''}</p>
         <p class="text-sm text-gray-500">พร้อมใช้งาน</p>
       </div>
     </div>
+  `;
+}
+
+function equipmentImageMarkup(e, className = 'equipment-thumb') {
+  const fallback = `<span class="${className} equipment-image-fallback"><i class="fa-solid fa-box"></i></span>`;
+  if (!e || !e.imageUrl) return fallback;
+  return `
+    <img src="${e.imageUrl}" alt="${e.name || 'อุปกรณ์'}" class="${className}" loading="lazy"
+      onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+    <span class="${className} equipment-image-fallback" style="display:none"><i class="fa-solid fa-box"></i></span>
   `;
 }
 
@@ -103,8 +116,25 @@ window.__openEquipmentForm = async (id) => {
       <input id="sw-qty" type="number" class="swal2-input" placeholder="จำนวนที่มี" value="${existing?.availableQty ?? ''}">
       <input id="sw-unit" class="swal2-input" placeholder="หน่วย (ชิ้น/ชุด/ตัว)" value="${existing?.unit || 'ชิ้น'}">
       <input id="sw-remarks" class="swal2-input" placeholder="หมายเหตุ" value="${existing?.remarks || ''}">
+      <div class="equipment-upload-field">
+        <label for="sw-image">ภาพอุปกรณ์จริง</label>
+        <input id="sw-image" type="file" accept="image/*" class="equipment-file-input">
+        <div id="sw-image-preview" class="equipment-form-preview">${equipmentImageMarkup(existing, 'equipment-form-image')}</div>
+        <p>รูปจะถูกย่ออัตโนมัติก่อนเก็บใน Google Drive</p>
+      </div>
     `,
     focusConfirm: false,
+    didOpen: () => {
+      const input = document.getElementById('sw-image');
+      const preview = document.getElementById('sw-image-preview');
+      if (!input || !preview) return;
+      input.addEventListener('change', () => {
+        const file = input.files && input.files[0];
+        if (!file) return;
+        const url = URL.createObjectURL(file);
+        preview.innerHTML = `<img src="${url}" alt="ตัวอย่างรูปอุปกรณ์" class="equipment-form-image">`;
+      });
+    },
     showCancelButton: true,
     showDenyButton: !!existing,
     denyButtonText: 'ลบ',
@@ -117,7 +147,8 @@ window.__openEquipmentForm = async (id) => {
       category: document.getElementById('sw-category').value,
       availableQty: Number(document.getElementById('sw-qty').value) || 0,
       unit: document.getElementById('sw-unit').value,
-      remarks: document.getElementById('sw-remarks').value
+      remarks: document.getElementById('sw-remarks').value,
+      imageFile: document.getElementById('sw-image').files[0] || null
     })
   }).then(async (result) => {
     if (result.isDenied && existing) {
@@ -138,10 +169,20 @@ window.__openEquipmentForm = async (id) => {
 
   Utils.loading('กำลังบันทึก...');
   try {
-    if (existing) await BawmusicAPI.updateEquipment(existing.id, formValues);
-    else await BawmusicAPI.createEquipment(formValues);
+    const imageFile = formValues.imageFile;
+    delete formValues.imageFile;
+    const saved = existing
+      ? await BawmusicAPI.updateEquipment(existing.id, formValues)
+      : await BawmusicAPI.createEquipment(formValues);
+
+    if (imageFile) {
+      Utils.closeLoading();
+      Utils.loading('กำลังย่อและอัปโหลดรูป...');
+      const imageData = await Utils.prepareImageUpload(imageFile);
+      await BawmusicAPI.uploadEquipmentImage(saved.id, imageData);
+    }
     Utils.closeLoading();
-    Utils.toast('success', 'บันทึกสำเร็จ');
+    Utils.toast('success', imageFile ? 'บันทึกข้อมูลและรูปภาพสำเร็จ' : 'บันทึกสำเร็จ');
     renderEquipment();
   } catch (err) {
     Utils.closeLoading();
