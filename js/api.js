@@ -57,10 +57,41 @@ const BawmusicAPI = {
     const gate = document.getElementById('auth-gate');
     if (!gate) throw new Error('ไม่พบหน้าล็อกอิน');
     gate.classList.remove('hidden-init');
+    const button = document.getElementById('google-signin-button');
+    const error = document.getElementById('auth-error');
+    const retry = document.getElementById('auth-retry');
+    if (button) button.innerHTML = '';
+    if (error) error.textContent = 'กำลังโหลดปุ่มเข้าสู่ระบบ...';
+    if (retry) retry.classList.add('hidden');
+
+    // Google Identity Services ถูกโหลดแบบ async/defer จึงอาจยังไม่พร้อม
+    // ในจังหวะที่ Alpine เรียก init() ครั้งแรก
     await new Promise((resolve) => {
-      if (!window.google || !google.accounts || !google.accounts.id) { document.getElementById('auth-error').textContent = 'โหลด Google Sign-In ไม่สำเร็จ กรุณารีเฟรชหน้าเว็บ'; return; }
-      google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: (response) => { BawmusicAPI.setGoogleIdToken(response.credential); gate.classList.add('hidden-init'); resolve(); window.location.reload(); } });
-      google.accounts.id.renderButton(document.getElementById('google-signin-button'), { theme: 'filled_black', size: 'large', width: 280, text: 'signin_with' });
+      const startedAt = Date.now();
+      const waitForGoogle = () => {
+        if (window.google && google.accounts && google.accounts.id) {
+          google.accounts.id.initialize({
+            client_id: GOOGLE_CLIENT_ID,
+            callback: (response) => {
+              BawmusicAPI.setGoogleIdToken(response.credential);
+              gate.classList.add('hidden-init');
+              resolve();
+              window.location.reload();
+            }
+          });
+          google.accounts.id.renderButton(button, { theme: 'filled_black', size: 'large', width: 280, text: 'signin_with' });
+          if (error) error.textContent = '';
+          return;
+        }
+        if (Date.now() - startedAt >= 10000) {
+          if (error) error.textContent = 'โหลด Google Sign-In ไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตหรือเปิดหน้านี้ใน Chrome';
+          if (retry) retry.classList.remove('hidden');
+          resolve();
+          return;
+        }
+        window.setTimeout(waitForGoogle, 200);
+      };
+      waitForGoogle();
     });
     return true;
   },

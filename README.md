@@ -31,7 +31,7 @@
 ดูขั้นตอนติดตั้งแบบละเอียดในไฟล์ **[INSTALL.md](./INSTALL.md)**
 
 สรุปสั้นๆ:
-1. คัดลอกโค้ดใน `api/Code.gs` ไปวางใน Google Apps Script ของ Google Sheet ใหม่
+1. คัดลอกโค้ดใน `code.gs` ไปวางใน Google Apps Script ของ Google Sheet ใหม่
 2. Deploy เป็น Web App (Who has access: **Anyone**)
 3. แก้ `API_URL` ใน `js/api.js` เป็น URL ที่ได้
 4. อัปโหลดไฟล์ทั้งหมด (ยกเว้นโฟลเดอร์ `api/`) ขึ้น GitHub Pages

@@ -127,7 +127,10 @@ function handleRequest(e, method) {
     return jsonResponse({ success: true, data: result }, 200);
 
   } catch (err) {
-    return jsonResponse({ success: false, error: err.message, stack: err.stack }, 500);
+    // ไม่ส่ง stack trace ออกไปยังผู้ใช้ เพราะอาจเปิดเผยชื่อฟังก์ชัน
+    // โครงสร้างระบบ หรือรายละเอียดภายในของ Apps Script ได้
+    console.error(err && err.stack ? err.stack : err);
+    return jsonResponse({ success: false, error: err.message || 'เกิดข้อผิดพลาดภายในระบบ' }, 500);
   }
 }
 
