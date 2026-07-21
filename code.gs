@@ -27,7 +27,7 @@ var PAYMENTS_HEADERS = ['id', 'bookingId', 'amount', 'type', 'paymentDate', 'evi
 var AUDIT_LOG_HEADERS = ['id', 'actorId', 'action', 'entity', 'beforeData', 'afterData', 'timestamp'];
 
 // Action ที่เปิดให้เรียกได้โดยไม่ต้องมี admin token (ใช้จากหน้า LIFF ของลูกค้า)
-// ทุก action อื่นนอกเหนือจากนี้ต้องส่ง Google ID Token ที่ผ่านการตรวจสอบมาด้วย
+// ทุก action อื่นนอกเหนือจากนี้ต้องส่ง adminToken ที่ตรงกับ Script Property "ADMIN_TOKEN" มาด้วย
 var PUBLIC_ACTIONS = ['submitLiffBooking', 'verifyAndUpsertMember', 'verifyLineToken', 'getBookingByToken'];
 
 // ---------- ENTRY POINTS ----------
@@ -53,7 +53,7 @@ function handleRequest(e, method) {
     }
 
     if (PUBLIC_ACTIONS.indexOf(action) === -1) {
-      requireGoogleAuth(params.googleIdToken);
+      requireAdminAuth(params.adminToken);
     }
 
     switch (action) {
@@ -127,10 +127,7 @@ function handleRequest(e, method) {
     return jsonResponse({ success: true, data: result }, 200);
 
   } catch (err) {
-    // ไม่ส่ง stack trace ออกไปยังผู้ใช้ เพราะอาจเปิดเผยชื่อฟังก์ชัน
-    // โครงสร้างระบบ หรือรายละเอียดภายในของ Apps Script ได้
-    console.error(err && err.stack ? err.stack : err);
-    return jsonResponse({ success: false, error: err.message || 'เกิดข้อผิดพลาดภายในระบบ' }, 500);
+    return jsonResponse({ success: false, error: err.message, stack: err.stack }, 500);
   }
 }
 
@@ -140,20 +137,16 @@ function jsonResponse(obj, code) {
   return output;
 }
 
-// ตรวจสอบว่าเรียกมาจากบัญชี Google ผู้ดูแลที่ได้รับอนุญาต
-function requireGoogleAuth(idToken) {
-  if (!idToken) throw new Error('กรุณาเข้าสู่ระบบด้วย Google ก่อนใช้งาน');
-  var props = PropertiesService.getScriptProperties();
-  var clientId = props.getProperty('GOOGLE_CLIENT_ID');
-  var allowedEmails = (props.getProperty('ADMIN_EMAILS') || '').toLowerCase().split(',').map(function (e) { return e.trim(); }).filter(String);
-  if (!clientId || allowedEmails.length === 0) throw new Error('ยังไม่ได้ตั้งค่า GOOGLE_CLIENT_ID หรือ ADMIN_EMAILS ใน Script Properties');
-  var response = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(idToken), { muteHttpExceptions: true });
-  if (response.getResponseCode() !== 200) throw new Error('Google ID Token ไม่ถูกต้องหรือหมดอายุ');
-  var info = JSON.parse(response.getContentText());
-  if (info.aud !== clientId) throw new Error('Google Client ID ไม่ตรงกับระบบ');
-  if (String(info.email_verified).toLowerCase() !== 'true') throw new Error('บัญชี Google ยังไม่ได้ยืนยันอีเมล');
-  if (allowedEmails.indexOf(String(info.email || '').toLowerCase()) === -1) throw new Error('บัญชีนี้ไม่มีสิทธิ์ผู้ดูแลระบบ');
-  return info;
+// ตรวจสอบว่าเรียกมาจากแอปแอดมินจริง (ป้องกันบุคคลภายนอกที่รู้ URL เรียก action ที่ไม่ใช่ public ได้)
+// ต้องตั้ง Script Property "ADMIN_TOKEN" ก่อน ไม่เช่นนั้นจะปฏิเสธทุก action ที่ไม่ใช่ public เพื่อความปลอดภัย
+function requireAdminAuth(token) {
+  var adminToken = PropertiesService.getScriptProperties().getProperty('ADMIN_TOKEN');
+  if (!adminToken) {
+    throw new Error('ระบบยังไม่ได้ตั้งค่า ADMIN_TOKEN ใน Script Properties — กรุณาตั้งค่าก่อนใช้งาน (ดู INSTALL.md)');
+  }
+  if (!token || token !== adminToken) {
+    throw new Error('Unauthorized: admin token ไม่ถูกต้องหรือไม่ได้ส่งมา');
+  }
 }
 
 // ---------- DATABASE INIT ----------
@@ -285,7 +278,7 @@ function seedSampleData(ss) {
 
   var custSheet = ss.getSheetByName(SHEET_NAMES.CUSTOMERS);
   if (custSheet.getLastRow() === 1) {
-    custSheet.appendRow([genId(), 'ลูกค้าตัวอย่าง', '08X-XXX-XXXX', '@example', '', 'พัทลุง', '', 'ข้อมูลตัวอย่างสำหรับทดสอบระบบ', new Date()]);
+    custSheet.appendRow([genId(), 'คุณสมชาย ใจดี', '081-234-5678', '@somchai', '', 'พัทลุง', '', 'ลูกค้าประจำ', new Date()]);
   }
 }
 
