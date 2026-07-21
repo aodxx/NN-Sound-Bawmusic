@@ -30,8 +30,10 @@ var AUDIT_LOG_HEADERS = ['id', 'actorId', 'action', 'entity', 'beforeData', 'aft
 // โฟลเดอร์ที่สร้างไว้ใน Google Drive ของ Bawmusic
 // สามารถกำหนดค่าใหม่ผ่าน Script Properties ได้ภายหลัง โดยใช้ key เดิม
 var DRIVE_DEFAULT_FOLDER_IDS = {
-  EQUIPMENT: '1-gDNrWtUseZas1vtbR-25Ukm_zoR2sOU',
-  PROFILE_BACKUP: '1lovhpdL0C24sNSFNOCHFQ8KVnQq1oxAw'
+  // ไม่เก็บ Folder ID จริงไว้ใน repository สาธารณะ
+  // ให้ตั้งค่าใน Apps Script > Project Settings > Script Properties
+  EQUIPMENT: '',
+  PROFILE_BACKUP: ''
 };
 
 // Action ที่เปิดให้เรียกได้โดยไม่ต้องมี session ของแอป (ใช้จากหน้า LIFF ของลูกค้า)
@@ -701,7 +703,7 @@ function uploadEquipmentImage(data) {
   var blob = Utilities.newBlob(Utilities.base64Decode(rawBase64), mimeType, fileName);
   var folder;
   try {
-    folder = DriveApp.getFolderById(getDriveConfig_().equipmentFolderId);
+    folder = DriveApp.getFolderById(requireDriveFolderId_(getDriveConfig_(), 'equipmentFolderId', 'DRIVE_EQUIPMENT_FOLDER_ID'));
   } catch (driveError) {
     throw new Error('เข้าถึงโฟลเดอร์ Google Drive สำหรับอุปกรณ์ไม่ได้ กรุณาตรวจสอบสิทธิ์ของบัญชีที่ Deploy Apps Script: ' + driveError.message);
   }
@@ -733,6 +735,14 @@ function getDriveConfig_() {
     equipmentFolderId: props.getProperty('DRIVE_EQUIPMENT_FOLDER_ID') || DRIVE_DEFAULT_FOLDER_IDS.EQUIPMENT,
     profileBackupFolderId: props.getProperty('DRIVE_PROFILE_BACKUP_FOLDER_ID') || DRIVE_DEFAULT_FOLDER_IDS.PROFILE_BACKUP
   };
+}
+
+function requireDriveFolderId_(config, key, propertyName) {
+  var folderId = config && config[key];
+  if (!folderId) {
+    throw new Error('ยังไม่ได้ตั้งค่า ' + propertyName + ' ใน Script Properties ของ Apps Script');
+  }
+  return folderId;
 }
 
 function driveImageUrl_(fileId) {
@@ -946,7 +956,7 @@ function prepareLineProfile_(profile) {
 
     var fileName = sanitizeDriveFileName_('line-profile-' + profile.lineUserId + '-' + new Date().getTime() + extensionForMime_(mimeType));
     blob.setName(fileName);
-    var file = DriveApp.getFolderById(getDriveConfig_().profileBackupFolderId).createFile(blob);
+    var file = DriveApp.getFolderById(requireDriveFolderId_(getDriveConfig_(), 'profileBackupFolderId', 'DRIVE_PROFILE_BACKUP_FOLDER_ID')).createFile(blob);
     profile.profileDriveFileId = file.getId();
     profile.profileDriveUpdatedAt = new Date();
 
