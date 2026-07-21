@@ -26,9 +26,9 @@ var MEMBERS_HEADERS = ['lineUserId', 'displayName', 'pictureUrl', 'isFriend', 'i
 var PAYMENTS_HEADERS = ['id', 'bookingId', 'amount', 'type', 'paymentDate', 'evidenceUrl', 'notes', 'createdAt'];
 var AUDIT_LOG_HEADERS = ['id', 'actorId', 'action', 'entity', 'beforeData', 'afterData', 'timestamp'];
 
-// Action ที่เปิดให้เรียกได้โดยไม่ต้องมี admin token (ใช้จากหน้า LIFF ของลูกค้า)
-// ทุก action อื่นนอกเหนือจากนี้ต้องส่ง Google ID Token ที่ผ่านการตรวจสอบมาด้วย
-var PUBLIC_ACTIONS = ['submitLiffBooking', 'verifyAndUpsertMember', 'verifyLineToken', 'getBookingByToken'];
+// Action ที่เปิดให้เรียกได้โดยไม่ต้องมี session ของแอป (ใช้จากหน้า LIFF ของลูกค้า)
+// การเรียกใช้งานระบบแอดมินต้องส่ง sessionToken ที่ออกโดย createSession
+var PUBLIC_ACTIONS = ['createSession', 'submitLiffBooking', 'verifyAndUpsertMember', 'verifyLineToken', 'getBookingByToken'];
 
 // ---------- ENTRY POINTS ----------
 
@@ -53,10 +53,11 @@ function handleRequest(e, method) {
     }
 
     if (PUBLIC_ACTIONS.indexOf(action) === -1) {
-      requireGoogleAuth(params.googleIdToken);
+      requireSession(params.sessionToken);
     }
 
     switch (action) {
+      case 'createSession': result = createSession(params.accessCode); break;
       // Bookings
       case 'listBookings': result = listBookings(params); break;
       case 'getBooking': result = getBooking(params.id); break;
@@ -140,20 +141,20 @@ function jsonResponse(obj, code) {
   return output;
 }
 
-// ตรวจสอบว่าเรียกมาจากบัญชี Google ผู้ดูแลที่ได้รับอนุญาต
-function requireGoogleAuth(idToken) {
-  if (!idToken) throw new Error('กรุณาเข้าสู่ระบบด้วย Google ก่อนใช้งาน');
-  var props = PropertiesService.getScriptProperties();
-  var clientId = props.getProperty('GOOGLE_CLIENT_ID');
-  var allowedEmails = (props.getProperty('ADMIN_EMAILS') || '').toLowerCase().split(',').map(function (e) { return e.trim(); }).filter(String);
-  if (!clientId || allowedEmails.length === 0) throw new Error('ยังไม่ได้ตั้งค่า GOOGLE_CLIENT_ID หรือ ADMIN_EMAILS ใน Script Properties');
-  var response = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(idToken), { muteHttpExceptions: true });
-  if (response.getResponseCode() !== 200) throw new Error('Google ID Token ไม่ถูกต้องหรือหมดอายุ');
-  var info = JSON.parse(response.getContentText());
-  if (info.aud !== clientId) throw new Error('Google Client ID ไม่ตรงกับระบบ');
-  if (String(info.email_verified).toLowerCase() !== 'true') throw new Error('บัญชี Google ยังไม่ได้ยืนยันอีเมล');
-  if (allowedEmails.indexOf(String(info.email || '').toLowerCase()) === -1) throw new Error('บัญชีนี้ไม่มีสิทธิ์ผู้ดูแลระบบ');
-  return info;
+// ออก session ชั่วคราวจากรหัสที่เก็บใน Script Properties
+function createSession(accessCode) {
+  var expected = PropertiesService.getScriptProperties().getProperty('APP_ACCESS_CODE');
+  if (!expected) throw new Error('ยังไม่ได้ตั้งค่า APP_ACCESS_CODE ใน Script Properties');
+  if (!accessCode || String(accessCode) !== String(expected)) throw new Error('รหัสเข้าใช้งานไม่ถูกต้อง');
+  var token = Utilities.getUuid() + Utilities.getUuid().replace(/-/g, '');
+  CacheService.getScriptCache().put('session_' + token, 'admin', 21600);
+  return { sessionToken: token, expiresIn: 21600 };
+}
+
+function requireSession(token) {
+  if (!token || CacheService.getScriptCache().get('session_' + token) !== 'admin') {
+    throw new Error('เซสชันหมดอายุ กรุณาใส่รหัสเข้าใช้งานใหม่');
+  }
 }
 
 // ---------- DATABASE INIT ----------
