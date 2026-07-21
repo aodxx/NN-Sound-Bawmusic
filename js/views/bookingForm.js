@@ -71,14 +71,14 @@ function paintBookingForm(equipment, templates) {
   });
 
   root.innerHTML = `
-  <div class="fixed inset-0 z-50 bg-navy-dark overflow-y-auto" id="booking-modal">
-    <div class="sticky top-0 bg-navy-dark/95 backdrop-blur border-b border-gold/20 px-4 py-3 flex items-center justify-between z-10">
+  <div class="fixed inset-0 z-50 bg-navy-dark overflow-y-auto booking-modal" id="booking-modal">
+    <div class="sticky top-0 bg-navy-dark/95 backdrop-blur border-b border-gold/20 px-4 py-3 flex items-center justify-between z-10 booking-form-header">
       <button onclick="closeBookingForm()" class="text-gray-400"><i class="fa-solid fa-xmark text-lg"></i></button>
       <h2 class="text-base font-semibold text-gold">${s.id ? 'แก้ไขการจอง' : 'จองงานใหม่'}</h2>
       <button onclick="submitBookingForm()" class="text-gold text-base font-semibold">บันทึก</button>
     </div>
 
-    <div class="px-4 py-4 max-w-2xl mx-auto space-y-4 pb-10">
+    <div class="px-4 py-4 max-w-2xl mx-auto space-y-4 pb-10 booking-form-content">
 
       <!-- Booking Status -->
       ${s.id ? `
