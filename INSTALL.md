@@ -140,10 +140,28 @@ submitLiffBooking      — รับการจองจากหน้า LIFF
 verifyLineToken        — ตรวจสอบ LINE ID Token กับเซิร์ฟเวอร์ LINE โดยตรง
 verifyAndUpsertMember  — verify token + บันทึกสมาชิกในขั้นตอนเดียว
 upsertMember / listMembers / getMemberByLineId
+listPublicEquipment      — ส่งรายการอุปกรณ์แบบปลอดภัยให้หน้า LIFF
+uploadEquipmentImage     — อัปโหลดรูปอุปกรณ์ไปยัง Google Drive (ต้องมี session แอดมิน)
 createPayment / updatePayment / deletePayment / listPayments / getPayment
 listAuditLog
 getBookingByToken      — ใช้แสดงรายละเอียดการจองผ่านลิงก์ที่ส่งให้ลูกค้า โดยไม่ต้องรู้ id จริง
 ```
+
+### Google Drive Media (รูปอุปกรณ์และสำรองรูปโปรไฟล์ LINE)
+
+โฟลเดอร์หลัก: `ภาพแอปดนตรี`
+
+- `equipment` — รูปอุปกรณ์ที่เปิดดูได้ด้วยลิงก์ เพื่อให้ลูกค้าเห็นผ่าน GitHub Pages/LIFF
+- `profiles-backup` — สำเนารูปโปรไฟล์ LINE แบบส่วนตัว ใช้เป็นข้อมูลสำรองเท่านั้น
+
+ค่าเริ่มต้นของโค้ดผูกกับโฟลเดอร์ที่เตรียมไว้แล้ว หากย้ายโฟลเดอร์ภายหลัง ให้ตั้ง Script Properties เพิ่ม:
+
+| Key | ค่า |
+|---|---|
+| `DRIVE_EQUIPMENT_FOLDER_ID` | ID โฟลเดอร์เก็บรูปอุปกรณ์ |
+| `DRIVE_PROFILE_BACKUP_FOLDER_ID` | ID โฟลเดอร์สำรองรูปโปรไฟล์ |
+
+หลังวาง `code.gs` เวอร์ชันใหม่ใน Apps Script ให้กด Run/Deploy แล้วอนุญาตสิทธิ์ Google Drive ครั้งแรก รูปโปรไฟล์ยังใช้ URL จาก LINE เป็นหลัก ส่วนรูปอุปกรณ์จะถูกย่อก่อนอัปโหลดและแสดงในหน้าอุปกรณ์ หน้างานใหม่ และหน้า LIFF ลูกค้า
 
 ---
 
