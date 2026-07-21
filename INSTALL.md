@@ -31,7 +31,16 @@
 5. ระบบจะขอสิทธิ์การเข้าถึง (Authorize access) — คลิกอนุญาตทั้งหมด (อาจต้องกด "Advanced" → "Go to Bawmusic (unsafe)" เนื่องจากยังไม่ได้ยืนยันแอป — เป็นเรื่องปกติสำหรับสคริปต์ส่วนตัว)
 6. คัดลอก **Web app URL** ที่ได้ (จะมีลักษณะ `https://script.google.com/macros/s/xxxxxxxxxx/exec`)
 
-### ขั้นตอนที่ 4 — ทดสอบ API
+### ขั้นตอนที่ 4 — ตั้งรหัสเข้าใช้งานแอป
+ไปที่ **Apps Script → Project Settings → Script Properties** แล้วเพิ่มรายการ:
+
+| Key | Value |
+|---|---|
+| `APP_ACCESS_CODE` | รหัสส่วนตัวของคุณ |
+
+รหัสนี้ใช้เข้าแอปแทน Google Sign-In และไม่ควรเผยแพร่ใน GitHub
+
+### ขั้นตอนที่ 5 — ทดสอบ API
 เปิด Web app URL ที่คัดลอกมาในเบราว์เซอร์ พร้อมต่อท้ายด้วย `?action=getSettings`
 
 ตัวอย่าง: `https://script.google.com/macros/s/xxxxx/exec?action=getSettings`
