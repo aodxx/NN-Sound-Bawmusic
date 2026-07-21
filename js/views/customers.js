@@ -46,16 +46,21 @@ window.__searchCustomers = (query) => {
 };
 
 function customerRow(c) {
+  const profile = c.lineProfile || null;
+  const profileImage = profile && profile.pictureUrl ? `
+    <img src="${profile.pictureUrl}" alt="${profile.displayName || c.name || 'ลูกค้า'}" class="customer-avatar-image" loading="lazy"
+      onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+    <span class="customer-avatar-fallback" style="display:none">${(c.name || '?').charAt(0)}</span>
+  ` : `<span class="customer-avatar-fallback">${(c.name || '?').charAt(0)}</span>`;
   return `
     <div class="bg-navy-light rounded-2xl p-3.5 border border-gold/10 shadow-sm shadow-black/5">
       <div class="flex items-center justify-between mb-2">
         <div class="flex items-center gap-2.5">
-          <div class="w-11 h-11 rounded-full bg-gold/20 flex items-center justify-center text-gold text-base font-semibold">
-            ${(c.name || '?').charAt(0)}
-          </div>
+          <div class="customer-avatar ${profile && profile.pictureUrl ? 'customer-avatar-line' : ''}">${profileImage}</div>
           <div>
             <p class="text-base font-medium text-gray-100">${c.name}</p>
             <p class="text-base text-gray-500">${Utils.formatPhone(c.phone)} ${c.line ? '· ' + c.line : ''}</p>
+            ${profile ? `<span class="customer-line-badge"><i class="fa-brands fa-line"></i>${profile.isBlocked ? 'บล็อก LINE' : 'เชื่อมต่อ LINE OA'}</span>` : ''}
           </div>
         </div>
         <button onclick="window.__openCustomerForm('${c.id}')" class="text-gray-400 px-2"><i class="fa-solid fa-ellipsis-vertical"></i></button>
