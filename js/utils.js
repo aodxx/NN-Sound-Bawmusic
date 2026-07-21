@@ -73,6 +73,49 @@ const Utils = {
     return digits;
   },
 
+  // ย่อรูปจากมือถือก่อนส่งไป Google Apps Script เพื่อลดเวลาอัปโหลดและขนาด payload
+  async prepareImageUpload(file, maxSide = 1600, quality = 0.82) {
+    if (!file || !String(file.type || '').startsWith('image/')) {
+      throw new Error('กรุณาเลือกไฟล์รูปภาพ');
+    }
+
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('อ่านไฟล์รูปภาพไม่สำเร็จ'));
+      reader.readAsDataURL(file);
+    });
+
+    const image = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('รูปนี้ไม่รองรับหรือไฟล์เสียหาย'));
+      img.src = dataUrl;
+    });
+
+    const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(image.width * scale));
+    canvas.height = Math.max(1, Math.round(image.height * scale));
+    const context = canvas.getContext('2d');
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
+    if (!blob) throw new Error('เตรียมรูปภาพไม่สำเร็จ');
+
+    const compressedDataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('แปลงรูปภาพไม่สำเร็จ'));
+      reader.readAsDataURL(blob);
+    });
+
+    const baseName = String(file.name || 'equipment-image').replace(/\.[^.]+$/, '') || 'equipment-image';
+    return { base64: compressedDataUrl, mimeType: 'image/jpeg', fileName: `${baseName}.jpg` };
+  },
+
   // แปลงวันที่แบบ date-only โดยไม่ให้ timezone ทำให้วันเลื่อน
   parseDate(dateValue) {
     if (dateValue === null || dateValue === undefined || dateValue === '') return null;
