@@ -3,11 +3,134 @@
 [x-cloak] { display: none !important; }
 .hidden-init { display: none !important; }
 
+:root {
+  --app-bg: #08080d;
+  --app-surface: rgba(20, 20, 34, .82);
+  --app-surface-solid: #151522;
+  --app-border: rgba(103, 232, 249, .14);
+  --app-muted: #94a3b8;
+  --app-cyan: #22d3ee;
+  --app-pink: #f637ec;
+  --app-radius: 1.25rem;
+  --app-shadow: 0 18px 45px rgba(0, 0, 0, .18);
+}
+
 * { -webkit-tap-highlight-color: transparent; }
 
 body {
   overscroll-behavior-y: contain;
+  min-width: 320px;
+  background:
+    radial-gradient(circle at 12% -8%, rgba(34, 211, 238, .09), transparent 28rem),
+    radial-gradient(circle at 94% 8%, rgba(246, 55, 236, .07), transparent 24rem),
+    var(--app-bg);
+  font-family: 'Kanit', sans-serif;
 }
+
+button, input, textarea, select { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: wait; opacity: .62; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
+  outline: 3px solid rgba(103, 232, 249, .45);
+  outline-offset: 2px;
+}
+
+body > header {
+  min-height: 4.5rem;
+  background: rgba(8, 8, 13, .76) !important;
+  border-color: var(--app-border) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .12);
+}
+body > header h1 { font-family: 'Prompt', sans-serif; font-size: .9rem !important; }
+body > header p { color: var(--app-muted) !important; font-size: .68rem !important; }
+body > header button {
+  border: 1px solid rgba(103, 232, 249, .1);
+  transition: transform .18s ease, border-color .18s ease, background .18s ease;
+}
+body > header button:hover { border-color: rgba(103, 232, 249, .3); background: rgba(34, 211, 238, .1); }
+
+main {
+  width: min(100% - 2rem, 68rem) !important;
+  padding-top: 1.35rem !important;
+  padding-bottom: 7.5rem !important;
+}
+
+/* Shared surface language: one visual rhythm across dashboard, forms and lists. */
+.dashboard-hero, .dashboard-metric, .dashboard-action, .dashboard-job-card,
+.dashboard-history-link, .dashboard-payment-panel, .dashboard-activity-list,
+.booking-card, .customer-card, .equipment-card {
+  box-shadow: var(--app-shadow);
+}
+.dashboard-hero { border-radius: 1.55rem; border-color: rgba(103, 232, 249, .22); }
+.dashboard-hero-content { padding: clamp(1rem, 3vw, 1.6rem); }
+.dashboard-next-job { border-color: rgba(255, 255, 255, .14); background: rgba(12, 12, 22, .72); }
+.dashboard-metrics { gap: .9rem; }
+.dashboard-metric { border-radius: var(--app-radius); }
+.dashboard-metric:hover, .dashboard-action:hover, .dashboard-job-card:hover, .dashboard-history-link:hover {
+  border-color: rgba(103, 232, 249, .34);
+  transform: translateY(-2px);
+}
+.dashboard-action, .dashboard-job-card, .dashboard-history-link { transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease; }
+.dashboard-actions { gap: .7rem; }
+.dashboard-action { min-height: 7.2rem; border-radius: var(--app-radius); }
+.dashboard-action strong { font-family: 'Prompt', sans-serif; }
+.dashboard-section-heading { margin-top: 1.4rem; }
+.dashboard-section-heading h3 { font-family: 'Prompt', sans-serif; font-size: .84rem; }
+.dashboard-section-heading > div > span { border: 1px solid rgba(103, 232, 249, .14); }
+.dashboard-job-card { padding: .85rem; border-radius: 1.1rem; }
+.dashboard-job-date { border-radius: .85rem; }
+.dashboard-empty-state { box-shadow: none; }
+
+/* Forms become easier to scan and easier to tap on phones. */
+input, textarea, select {
+  min-height: 2.8rem;
+  border-radius: .8rem;
+  transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
+}
+input::placeholder, textarea::placeholder { color: #64748b; }
+label { letter-spacing: .01em; }
+
+nav.fixed {
+  bottom: max(.75rem, env(safe-area-inset-bottom));
+}
+nav.fixed > div {
+  border-color: rgba(103, 232, 249, .16) !important;
+  background: rgba(15, 15, 26, .88) !important;
+  box-shadow: 0 18px 45px rgba(0, 0, 0, .3) !important;
+  backdrop-filter: blur(20px);
+}
+nav.fixed button { min-height: 3.1rem; }
+nav.fixed button span { font-size: .66rem !important; }
+
+@media (min-width: 640px) {
+  .dashboard-metrics { grid-template-columns: 1.25fr .75fr; }
+  .dashboard-action { min-height: 7.6rem; }
+  .dashboard-card-list { gap: .7rem; }
+}
+
+@media (min-width: 1024px) {
+  body > header { padding-inline: 2rem !important; }
+  main { padding-top: 2rem !important; }
+  .dashboard-hero { min-height: 21rem; }
+  .dashboard-hero-content { min-height: 21rem; }
+  nav.fixed { left: 50%; right: auto; width: min(100% - 4rem, 42rem); transform: translateX(-50%); }
+}
+
+[data-theme="light"] {
+  --app-bg: #f5f3ff;
+  --app-surface: rgba(255, 255, 255, .86);
+  --app-surface-solid: #fff;
+  --app-border: rgba(124, 58, 237, .14);
+  --app-shadow: 0 18px 42px rgba(79, 70, 229, .1);
+}
+[data-theme="light"] body {
+  background:
+    radial-gradient(circle at 8% -10%, rgba(124, 58, 237, .1), transparent 28rem),
+    radial-gradient(circle at 96% 10%, rgba(192, 38, 211, .08), transparent 24rem),
+    var(--app-bg);
+}
+[data-theme="light"] body > header { background: rgba(255, 255, 255, .8) !important; }
+[data-theme="light"] nav.fixed > div { background: rgba(255, 255, 255, .88) !important; border-color: rgba(124, 58, 237, .16) !important; }
 
 /* ============================================
    NN' SOUND MUSIC — Dashboard
@@ -375,26 +498,3 @@ button, [onclick] { touch-action: manipulation; }
   border-color: rgba(124, 58, 237, .12);
   box-shadow: 0 10px 28px rgba(79, 70, 229, .07);
 }
-[data-theme="light"] .dashboard-metric-compact strong,
-[data-theme="light"] .dashboard-action strong,
-[data-theme="light"] .dashboard-job-copy strong,
-[data-theme="light"] .dashboard-section-heading h3,
-[data-theme="light"] .dashboard-payment-heading h3,
-[data-theme="light"] .dashboard-activity-copy strong { color: #201c33; }
-[data-theme="light"] .dashboard-action-primary {
-  background: linear-gradient(145deg, rgba(124,58,237,.12), rgba(192,38,211,.08));
-  border-color: rgba(124,58,237,.24);
-}
-[data-theme="light"] .dashboard-section-heading > div > span,
-[data-theme="light"] .dashboard-activity-icon {
-  color: #7c3aed;
-  background: rgba(124,58,237,.09);
-}
-[data-theme="light"] .dashboard-empty-state,
-[data-theme="light"] .dashboard-activity-list {
-  background: rgba(255,255,255,.72);
-  border-color: rgba(124,58,237,.12);
-}
-[data-theme="light"] .dashboard-payment-panel {
-  background: linear-gradient(145deg, rgba(192,38,211,.07), #fff 48%);
-  border-color: rgba(192,38,211,.14);
