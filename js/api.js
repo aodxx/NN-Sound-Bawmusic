@@ -96,9 +96,11 @@ const BawmusicAPI = {
 
   // Equipment
   listEquipment: () => BawmusicAPI.call('listEquipment', {}, true),
+  listPublicEquipment: () => BawmusicAPI.call('listPublicEquipment', {}, true),
   createEquipment: (data) => BawmusicAPI.call('createEquipment', { data }, true),
   updateEquipment: (id, data) => BawmusicAPI.call('updateEquipment', { id, data }, true),
   deleteEquipment: (id) => BawmusicAPI.call('deleteEquipment', { id }, true),
+  uploadEquipmentImage: (equipmentId, data) => BawmusicAPI.call('uploadEquipmentImage', { data: { equipmentId, ...data } }, true),
 
   // Templates
   listTemplates: () => BawmusicAPI.call('listTemplates', {}, true),
