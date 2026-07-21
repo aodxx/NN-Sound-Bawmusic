@@ -240,6 +240,7 @@ function equipmentCheckRow(e) {
     <div class="flex items-center justify-between bg-navy rounded-lg px-3 py-3.5">
       <label class="flex items-center gap-3 flex-1">
         <input type="checkbox" ${selected ? 'checked' : ''} onchange="toggleEquipment('${e.name}', this.checked)" class="accent-gold w-6 h-6">
+        ${typeof equipmentImageMarkup === 'function' ? equipmentImageMarkup(e, 'booking-equipment-thumb') : ''}
         <span class="text-base text-gray-200">${e.name}</span>
       </label>
       ${selected ? `
