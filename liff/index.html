@@ -126,6 +126,16 @@
         <div class="grid grid-cols-4 gap-2" id="jobtype-grid"></div>
       </div>
 
+      <section id="public-equipment-section" class="hidden-init border-t border-gold/10 pt-4">
+        <div class="flex items-center justify-between mb-2">
+          <div>
+            <p class="text-base text-gray-100 font-semibold"><i class="fa-solid fa-boxes-stacked text-gold mr-1.5"></i>อุปกรณ์จริงของเรา</p>
+            <p class="text-xs text-gray-500">ดูภาพอุปกรณ์ก่อนส่งคำขอจอง</p>
+          </div>
+        </div>
+        <div id="public-equipment-grid" class="grid grid-cols-2 gap-3"></div>
+      </section>
+
       <div>
         <label class="text-sm text-gray-500 block mb-1">รายละเอียดเพิ่มเติม</label>
         <textarea id="field-remarks" rows="3" placeholder="เช่น จำนวนแขก, ความต้องการพิเศษ"
@@ -201,6 +211,53 @@
       toast: true, position: 'top', showConfirmButton: false, timer: 2200, timerProgressBar: true,
       background: '#13131f', color: '#fff'
     }).fire({ icon, title });
+  }
+
+  function escapeHtml(value) {
+    return String(value || '').replace(/[&<>'"]/g, character => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+    }[character]));
+  }
+
+  function equipmentCategoryLabel(category) {
+    return ({
+      'Sound Systems': 'ระบบเสียง', 'Lighting': 'ไฟ/แสง', Stage: 'เวที',
+      Accessories: 'อุปกรณ์เสริม', 'Support Equipment': 'อุปกรณ์สนับสนุน'
+    })[category] || category || 'อุปกรณ์';
+  }
+
+  function renderPublicEquipment(items) {
+    const section = document.getElementById('public-equipment-section');
+    const grid = document.getElementById('public-equipment-grid');
+    if (!section || !grid || !Array.isArray(items) || !items.length) return;
+
+    grid.innerHTML = items.map(item => {
+      const imageUrl = escapeHtml(item.imageUrl || '');
+      const image = imageUrl ? `
+        <img src="${imageUrl}" alt="${escapeHtml(item.name)}" class="w-full h-28 object-cover"
+          onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <div class="w-full h-28 items-center justify-center bg-navy text-gray-500" style="display:none"><i class="fa-solid fa-box text-xl"></i></div>
+      ` : `<div class="w-full h-28 flex items-center justify-center bg-navy text-gray-500"><i class="fa-solid fa-box text-xl"></i></div>`;
+      return `
+        <article class="overflow-hidden rounded-xl border border-gold/10 bg-navy-light shadow-sm">
+          <div class="overflow-hidden bg-navy">${image}</div>
+          <div class="p-2.5">
+            <p class="text-sm font-semibold text-gray-100 truncate">${escapeHtml(item.name)}</p>
+            <p class="text-xs text-gray-500 mt-0.5">${escapeHtml(equipmentCategoryLabel(item.category))}</p>
+          </div>
+        </article>
+      `;
+    }).join('');
+    section.classList.remove('hidden-init');
+  }
+
+  async function loadPublicEquipment() {
+    try {
+      const equipment = await callApi('listPublicEquipment');
+      renderPublicEquipment(equipment);
+    } catch (err) {
+      console.warn('โหลดรูปอุปกรณ์สำหรับลูกค้าไม่สำเร็จ:', err.message);
+    }
   }
 
   function initFormOptions() {
@@ -320,6 +377,7 @@
       await callApi('verifyAndUpsertMember', { idToken });
 
       showScreen('screen-form');
+      loadPublicEquipment();
     } catch (err) {
       console.error('LIFF init failed:', err);
       showError(err.message || 'ไม่สามารถเชื่อมต่อ LINE ได้ กรุณาเปิดลิงก์นี้ผ่านแอป LINE');
