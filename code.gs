@@ -30,8 +30,8 @@ var AUDIT_LOG_HEADERS = ['id', 'actorId', 'action', 'entity', 'beforeData', 'aft
 // โฟลเดอร์ที่สร้างไว้ใน Google Drive ของ Bawmusic
 // สามารถกำหนดค่าใหม่ผ่าน Script Properties ได้ภายหลัง โดยใช้ key เดิม
 var DRIVE_DEFAULT_FOLDER_IDS = {
-  EQUIPMENT: '1zSoEahF-hHXmuEsEaGNMkdYU5oQSenl3',
-  PROFILE_BACKUP: '1tMBEeUG1QoTcsD_h-FaRvQ7Wf5miiTOV'
+  EQUIPMENT: '1-gDNrWtUseZas1vtbR-25Ukm_zoR2sOU',
+  PROFILE_BACKUP: '1lovhpdL0C24sNSFNOCHFQ8KVnQq1oxAw'
 };
 
 // Action ที่เปิดให้เรียกได้โดยไม่ต้องมี session ของแอป (ใช้จากหน้า LIFF ของลูกค้า)
