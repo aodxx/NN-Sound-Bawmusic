@@ -22,13 +22,21 @@ var SHEET_NAMES = {
   AUDIT_LOG: 'AuditLog'
 };
 
-var MEMBERS_HEADERS = ['lineUserId', 'displayName', 'pictureUrl', 'isFriend', 'isBlocked', 'marketingConsent', 'lastActiveAt', 'createdAt'];
+var MEMBERS_HEADERS = ['lineUserId', 'displayName', 'pictureUrl', 'isFriend', 'isBlocked', 'marketingConsent', 'lastActiveAt', 'createdAt', 'profileDriveFileId', 'profileDriveUpdatedAt'];
+var EQUIPMENT_HEADERS = ['id', 'name', 'category', 'availableQty', 'unit', 'remarks', 'imageFileId', 'imageUrl', 'imageName', 'imageUpdatedAt'];
 var PAYMENTS_HEADERS = ['id', 'bookingId', 'amount', 'type', 'paymentDate', 'evidenceUrl', 'notes', 'createdAt'];
 var AUDIT_LOG_HEADERS = ['id', 'actorId', 'action', 'entity', 'beforeData', 'afterData', 'timestamp'];
 
+// โฟลเดอร์ที่สร้างไว้ใน Google Drive ของ Bawmusic
+// สามารถกำหนดค่าใหม่ผ่าน Script Properties ได้ภายหลัง โดยใช้ key เดิม
+var DRIVE_DEFAULT_FOLDER_IDS = {
+  EQUIPMENT: '1zSoEahF-hHXmuEsEaGNMkdYU5oQSenl3',
+  PROFILE_BACKUP: '1tMBEeUG1QoTcsD_h-FaRvQ7Wf5miiTOV'
+};
+
 // Action ที่เปิดให้เรียกได้โดยไม่ต้องมี session ของแอป (ใช้จากหน้า LIFF ของลูกค้า)
 // การเรียกใช้งานระบบแอดมินต้องส่ง sessionToken ที่ออกโดย createSession
-var PUBLIC_ACTIONS = ['createSession', 'submitLiffBooking', 'verifyAndUpsertMember', 'verifyLineToken', 'getBookingByToken'];
+var PUBLIC_ACTIONS = ['createSession', 'submitLiffBooking', 'verifyAndUpsertMember', 'verifyLineToken', 'getBookingByToken', 'listPublicEquipment'];
 
 // ---------- ENTRY POINTS ----------
 
@@ -77,9 +85,11 @@ function handleRequest(e, method) {
 
       // Equipment
       case 'listEquipment': result = listEquipment(); break;
+      case 'listPublicEquipment': result = listPublicEquipment(); break;
       case 'createEquipment': result = createEquipment(params.data); break;
       case 'updateEquipment': result = updateEquipment(params.id, params.data); break;
       case 'deleteEquipment': result = deleteEquipment(params.id); break;
+      case 'uploadEquipmentImage': result = uploadEquipmentImage(params.data); break;
       case 'checkAvailability': result = checkAvailability(params.date, params.items); break;
 
       // Templates
@@ -175,9 +185,7 @@ function ensureDatabaseInitialized() {
     'date', 'startTime', 'endTime', 'jobType', 'package', 'price', 'deposit', 'remaining',
     'remarks', 'equipment', 'status', 'createdAt', 'updatedAt', 'bookingToken'
   ]);
-  createSheetIfMissing(ss, SHEET_NAMES.EQUIPMENT, [
-    'id', 'name', 'category', 'availableQty', 'unit', 'remarks'
-  ]);
+  createSheetIfMissing(ss, SHEET_NAMES.EQUIPMENT, EQUIPMENT_HEADERS);
   createSheetIfMissing(ss, SHEET_NAMES.TEMPLATES, [
     'id', 'name', 'jobType', 'equipmentPreset', 'notes'
   ]);
@@ -189,6 +197,9 @@ function ensureDatabaseInitialized() {
 
   seedSampleData(ss);
   seedDefaultSettings(ss);
+
+  // รองรับกรณีมีชีตเดิมอยู่แล้วแต่ฐานข้อมูลยังไม่เคยบันทึกสถานะ initialized
+  migrateSchemaIfNeeded(ss);
 
   props.setProperty('DB_INITIALIZED', 'true');
 }
@@ -217,6 +228,16 @@ function migrateSchemaIfNeeded(ss) {
 
   var bookingsSheet = ss.getSheetByName(SHEET_NAMES.BOOKINGS);
   if (bookingsSheet) addColumnIfMissing(bookingsSheet, 'bookingToken');
+
+  var equipmentSheet = ss.getSheetByName(SHEET_NAMES.EQUIPMENT);
+  if (equipmentSheet) {
+    EQUIPMENT_HEADERS.slice(6).forEach(function (header) { addColumnIfMissing(equipmentSheet, header); });
+  }
+
+  var membersSheet = ss.getSheetByName(SHEET_NAMES.MEMBERS);
+  if (membersSheet) {
+    MEMBERS_HEADERS.slice(8).forEach(function (header) { addColumnIfMissing(membersSheet, header); });
+  }
 }
 
 // เพิ่มคอลัมน์ใหม่ต่อท้ายชีตเดิม โดยไม่กระทบข้อมูล/คอลัมน์ที่มีอยู่แล้ว
@@ -325,7 +346,7 @@ function sheetToObjectsByKey(sheet, keyField) {
 // แปลงเป็นรูปแบบที่ API และหน้าเว็บใช้ร่วมกันได้ตั้งแต่ต้นทาง
 function normalizeApiDate(fieldName, value) {
   if (!(value instanceof Date) || isNaN(value.getTime())) return value;
-  var dateFields = ['date', 'createdAt', 'updatedAt', 'paymentDate', 'timestamp', 'lastActiveAt'];
+  var dateFields = ['date', 'createdAt', 'updatedAt', 'paymentDate', 'timestamp', 'lastActiveAt', 'profileDriveUpdatedAt', 'imageUpdatedAt'];
   if (dateFields.indexOf(fieldName) === -1) return value;
   var timezone = Session.getScriptTimeZone() || 'Asia/Bangkok';
   if (fieldName === 'date') {
@@ -617,10 +638,23 @@ function listEquipment() {
   return sheetToObjects(sheet);
 }
 
+// ข้อมูลอุปกรณ์แบบปลอดภัยสำหรับหน้า LIFF ลูกค้า (ไม่เปิดเผยจำนวนสต็อก/รหัสไฟล์ Drive)
+function listPublicEquipment() {
+  return listEquipment().filter(function (e) { return e && e.name; }).map(function (e) {
+    return {
+      id: e.id,
+      name: e.name,
+      category: e.category || '',
+      unit: e.unit || '',
+      imageUrl: e.imageUrl || ''
+    };
+  });
+}
+
 function createEquipment(data) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAMES.EQUIPMENT);
   var id = genId();
-  sheet.appendRow([id, data.name, data.category || '', data.availableQty || 0, data.unit || 'ชิ้น', data.remarks || '']);
+  sheet.appendRow([id, data.name, data.category || '', data.availableQty || 0, data.unit || 'ชิ้น', data.remarks || '', '', '', '', '']);
   return { id: id };
 }
 
@@ -641,8 +675,80 @@ function deleteEquipment(id) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAMES.EQUIPMENT);
   var rowIdx = findRowIndexById(sheet, id);
   if (rowIdx === -1) throw new Error('Equipment not found');
+  var existing = listEquipment().find(function (e) { return e.id === id; });
   sheet.deleteRow(rowIdx);
+  if (existing && existing.imageFileId) trashDriveFile_(existing.imageFileId);
   return { id: id };
+}
+
+// รับรูปอุปกรณ์จากหน้าแอดมินเป็น base64 ที่ถูกย่อแล้ว แล้วบันทึกเป็นไฟล์ใน Drive
+function uploadEquipmentImage(data) {
+  if (!data || !data.equipmentId) throw new Error('equipmentId is required');
+  if (!data.base64) throw new Error('ไม่พบข้อมูลรูปภาพ');
+
+  var equipment = listEquipment().find(function (e) { return e.id === data.equipmentId; });
+  if (!equipment) throw new Error('ไม่พบอุปกรณ์ที่ต้องการใส่รูป');
+
+  var mimeType = String(data.mimeType || 'image/jpeg').toLowerCase();
+  if (!/^image\/(jpeg|png|webp|gif)$/.test(mimeType)) {
+    throw new Error('รองรับเฉพาะไฟล์ JPG, PNG, WEBP หรือ GIF');
+  }
+
+  var rawBase64 = String(data.base64).replace(/^data:[^,]+,/, '');
+  if (rawBase64.length > 8 * 1024 * 1024) throw new Error('รูปใหญ่เกินไป กรุณาเลือกรูปที่เล็กกว่า 6 MB');
+
+  var fileName = sanitizeDriveFileName_(data.fileName || ('equipment-' + equipment.id + extensionForMime_(mimeType)));
+  var blob = Utilities.newBlob(Utilities.base64Decode(rawBase64), mimeType, fileName);
+  var folder = DriveApp.getFolderById(getDriveConfig_().equipmentFolderId);
+  var file = folder.createFile(blob);
+
+  try {
+    // รูปอุปกรณ์ต้องเปิดดูได้จากหน้า GitHub Pages/LIFF ของลูกค้า
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  } catch (sharingError) {
+    file.setTrashed(true);
+    throw new Error('ไม่สามารถเปิดสิทธิ์ดูรูปอุปกรณ์จาก Google Drive ได้: ' + sharingError.message);
+  }
+
+  var update = {
+    imageFileId: file.getId(),
+    imageUrl: driveImageUrl_(file.getId()),
+    imageName: file.getName(),
+    imageUpdatedAt: new Date()
+  };
+  updateEquipment(equipment.id, update);
+  if (equipment.imageFileId && equipment.imageFileId !== file.getId()) trashDriveFile_(equipment.imageFileId);
+
+  return { id: equipment.id, imageFileId: update.imageFileId, imageUrl: update.imageUrl, imageName: update.imageName };
+}
+
+function getDriveConfig_() {
+  var props = PropertiesService.getScriptProperties();
+  return {
+    equipmentFolderId: props.getProperty('DRIVE_EQUIPMENT_FOLDER_ID') || DRIVE_DEFAULT_FOLDER_IDS.EQUIPMENT,
+    profileBackupFolderId: props.getProperty('DRIVE_PROFILE_BACKUP_FOLDER_ID') || DRIVE_DEFAULT_FOLDER_IDS.PROFILE_BACKUP
+  };
+}
+
+function driveImageUrl_(fileId) {
+  return 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(fileId) + '&sz=w1000';
+}
+
+function extensionForMime_(mimeType) {
+  var map = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif' };
+  return map[mimeType] || '.jpg';
+}
+
+function sanitizeDriveFileName_(name) {
+  return String(name || 'image').replace(/[\\/:*?"<>|#%{}~&]/g, '-').substring(0, 120);
+}
+
+function trashDriveFile_(fileId) {
+  try {
+    if (fileId) DriveApp.getFileById(fileId).setTrashed(true);
+  } catch (e) {
+    Logger.log('trashDriveFile failed: ' + e.message);
+  }
 }
 
 function checkAvailability(date, items) {
@@ -755,7 +861,9 @@ function upsertMember(data) {
       data.isBlocked !== undefined ? data.isBlocked : false,
       data.marketingConsent !== undefined ? data.marketingConsent : false,
       now,
-      now
+      now,
+      data.profileDriveFileId || '',
+      data.profileDriveUpdatedAt || ''
     ]);
     logAudit(data.lineUserId, 'create_member', 'Member:' + data.lineUserId, null, data);
   } else {
@@ -811,9 +919,44 @@ function verifyLineIdToken(idToken) {
   };
 }
 
+// วิธี A: ใช้ URL จาก LINE เป็นรูปหลัก และเก็บสำเนาใน Drive แบบส่วนตัวเพื่อสำรอง/กู้คืน
+// หาก Drive มีปัญหา จะไม่ทำให้การเข้าสู่ LIFF หรือการจองงานล้มเหลว
+function prepareLineProfile_(profile) {
+  if (!profile || !profile.lineUserId || !profile.pictureUrl) return profile;
+
+  try {
+    var current = getMemberByLineId(profile.lineUserId);
+    if (current && current.pictureUrl === profile.pictureUrl && current.profileDriveFileId) {
+      profile.profileDriveFileId = current.profileDriveFileId;
+      profile.profileDriveUpdatedAt = current.profileDriveUpdatedAt || '';
+      return profile;
+    }
+
+    var response = UrlFetchApp.fetch(profile.pictureUrl, { muteHttpExceptions: true });
+    if (response.getResponseCode() !== 200) throw new Error('LINE รูปโปรไฟล์ตอบกลับสถานะ ' + response.getResponseCode());
+
+    var blob = response.getBlob();
+    var mimeType = String(blob.getContentType() || 'image/jpeg').toLowerCase();
+    if (mimeType.indexOf('image/') !== 0) throw new Error('ไฟล์จาก LINE ไม่ใช่รูปภาพ');
+
+    var fileName = sanitizeDriveFileName_('line-profile-' + profile.lineUserId + '-' + new Date().getTime() + extensionForMime_(mimeType));
+    blob.setName(fileName);
+    var file = DriveApp.getFolderById(getDriveConfig_().profileBackupFolderId).createFile(blob);
+    profile.profileDriveFileId = file.getId();
+    profile.profileDriveUpdatedAt = new Date();
+
+    if (current && current.profileDriveFileId && current.profileDriveFileId !== file.getId()) {
+      trashDriveFile_(current.profileDriveFileId);
+    }
+  } catch (e) {
+    Logger.log('LINE profile backup skipped: ' + e.message);
+  }
+  return profile;
+}
+
 // ใช้จากหน้า LIFF: verify token แล้วบันทึก/อัปเดต Member ในขั้นตอนเดียว
 function verifyAndUpsertMember(idToken) {
-  var profile = verifyLineIdToken(idToken);
+  var profile = prepareLineProfile_(verifyLineIdToken(idToken));
   return upsertMember(profile);
 }
 
@@ -953,7 +1096,7 @@ function listAuditLog(params) {
 function submitLiffBooking(idToken, data) {
   if (!data || !data.date) throw new Error('กรุณาระบุวันที่จัดงาน');
 
-  var profile = verifyLineIdToken(idToken); // throws ถ้า token ไม่ถูกต้อง
+  var profile = prepareLineProfile_(verifyLineIdToken(idToken)); // throws ถ้า token ไม่ถูกต้อง
   upsertMember(profile);
 
   var customers = listCustomers({});
