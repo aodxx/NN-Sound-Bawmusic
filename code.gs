@@ -26,6 +26,7 @@ var MEMBERS_HEADERS = ['lineUserId', 'displayName', 'pictureUrl', 'isFriend', 'i
 var EQUIPMENT_HEADERS = ['id', 'name', 'category', 'availableQty', 'unit', 'remarks', 'imageFileId', 'imageUrl', 'imageName', 'imageUpdatedAt'];
 var PAYMENTS_HEADERS = ['id', 'bookingId', 'amount', 'type', 'paymentDate', 'evidenceUrl', 'notes', 'createdAt'];
 var AUDIT_LOG_HEADERS = ['id', 'actorId', 'action', 'entity', 'beforeData', 'afterData', 'timestamp'];
+var DB_SCHEMA_VERSION = '3.4.0';
 
 // โฟลเดอร์ที่สร้างไว้ใน Google Drive ของ Bawmusic
 // สามารถกำหนดค่าใหม่ผ่าน Script Properties ได้ภายหลัง โดยใช้ key เดิม
@@ -53,8 +54,6 @@ function doPost(e) {
 function handleRequest(e, method) {
   var result;
   try {
-    ensureDatabaseInitialized();
-
     var params = method === 'GET' ? e.parameter : JSON.parse(e.postData.contents);
     var action = params.action;
 
@@ -62,9 +61,13 @@ function handleRequest(e, method) {
       return jsonResponse({ success: false, error: 'Missing action parameter' }, 400);
     }
 
+    // ตรวจ session ก่อนแตะ Spreadsheet เพื่อให้ session หมดอายุแล้วตอบกลับได้ทันที
     if (PUBLIC_ACTIONS.indexOf(action) === -1) {
       requireSession(params.sessionToken);
     }
+
+    // createSession ไม่ควรถูกบล็อกด้วยการเริ่มฐานข้อมูล
+    if (action !== 'createSession') ensureDatabaseInitialized();
 
     switch (action) {
       case 'createSession': result = createSession(params.accessCode); break;
@@ -172,10 +175,17 @@ function requireSession(token) {
 // ---------- DATABASE INIT ----------
 
 function ensureDatabaseInitialized() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
   var props = PropertiesService.getScriptProperties();
-  if (props.getProperty('DB_INITIALIZED') === 'true') {
+  var initialized = props.getProperty('DB_INITIALIZED') === 'true';
+  var schemaVersion = props.getProperty('DB_SCHEMA_VERSION') || '';
+
+  // ไม่อ่าน Spreadsheet ซ้ำทุก request เมื่อ schema รุ่นปัจจุบันพร้อมแล้ว
+  if (initialized && schemaVersion === DB_SCHEMA_VERSION) return;
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (initialized) {
     migrateSchemaIfNeeded(ss);
+    props.setProperty('DB_SCHEMA_VERSION', DB_SCHEMA_VERSION);
     return;
   }
 
@@ -204,6 +214,7 @@ function ensureDatabaseInitialized() {
   migrateSchemaIfNeeded(ss);
 
   props.setProperty('DB_INITIALIZED', 'true');
+  props.setProperty('DB_SCHEMA_VERSION', DB_SCHEMA_VERSION);
 }
 
 // เติมชีต/คอลัมน์ที่เพิ่มใหม่ภายหลัง ให้ผู้ใช้ที่เคยสร้างฐานข้อมูลไปแล้วโดยไม่กระทบข้อมูลเดิม
@@ -711,14 +722,19 @@ function uploadEquipmentImage(data) {
   } catch (driveError) {
     throw new Error('เข้าถึงโฟลเดอร์ Google Drive สำหรับอุปกรณ์ไม่ได้ กรุณาตรวจสอบสิทธิ์ของบัญชีที่ Deploy Apps Script: ' + driveError.message);
   }
-  var file = folder.createFile(blob);
+  var file;
+  try {
+    file = folder.createFile(blob);
+  } catch (createError) {
+    throw new Error('สร้างไฟล์ใน Google Drive ไม่สำเร็จ: ' + createError.message);
+  }
 
   try {
     // รูปอุปกรณ์ต้องเปิดดูได้จากหน้า GitHub Pages/LIFF ของลูกค้า
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   } catch (sharingError) {
     file.setTrashed(true);
-    throw new Error('ไม่สามารถเปิดสิทธิ์ดูรูปอุปกรณ์จาก Google Drive ได้: ' + sharingError.message);
+    throw new Error('สร้างไฟล์แล้ว แต่เปิดสิทธิ์ดูรูปจาก Google Drive ไม่สำเร็จ: ' + sharingError.message);
   }
 
   var update = {
@@ -727,7 +743,12 @@ function uploadEquipmentImage(data) {
     imageName: file.getName(),
     imageUpdatedAt: new Date()
   };
-  updateEquipment(equipment.id, update);
+  try {
+    updateEquipment(equipment.id, update);
+  } catch (sheetError) {
+    file.setTrashed(true);
+    throw new Error('อัปโหลดไฟล์แล้ว แต่บันทึกลิงก์ลง Google Sheets ไม่สำเร็จ: ' + sheetError.message);
+  }
   if (equipment.imageFileId && equipment.imageFileId !== file.getId()) trashDriveFile_(equipment.imageFileId);
 
   return { id: equipment.id, imageFileId: update.imageFileId, imageUrl: update.imageUrl, imageName: update.imageName };
@@ -753,11 +774,33 @@ function authorizeDriveAccess() {
   var config = getDriveConfig_();
   var equipmentFolder = DriveApp.getFolderById(requireDriveFolderId_(config, 'equipmentFolderId', 'DRIVE_EQUIPMENT_FOLDER_ID'));
   var profileFolder = DriveApp.getFolderById(requireDriveFolderId_(config, 'profileBackupFolderId', 'DRIVE_PROFILE_BACKUP_FOLDER_ID'));
-  return {
-    authorized: true,
-    equipmentFolder: equipmentFolder.getName(),
-    profileBackupFolder: profileFolder.getName()
-  };
+  var equipmentProbe = null;
+  var profileProbe = null;
+
+  try {
+    // ทดสอบสิทธิ์ที่จำเป็นจริง: สร้างไฟล์ ลองเปิดลิงก์ และลบไฟล์ทดสอบ
+    equipmentProbe = equipmentFolder.createFile(
+      Utilities.newBlob('Bawmusic Drive access test', 'text/plain', '.bawmusic-equipment-access-test-' + Utilities.getUuid() + '.txt')
+    );
+    equipmentProbe.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+    profileProbe = profileFolder.createFile(
+      Utilities.newBlob('Bawmusic Drive access test', 'text/plain', '.bawmusic-profile-access-test-' + Utilities.getUuid() + '.txt')
+    );
+
+    return {
+      authorized: true,
+      writeTest: true,
+      publicViewTest: true,
+      equipmentFolder: equipmentFolder.getName(),
+      profileBackupFolder: profileFolder.getName()
+    };
+  } catch (driveError) {
+    throw new Error('เข้าถึง Drive ได้ แต่ทดสอบสร้าง/เปิดสิทธิ์ไฟล์ไม่สำเร็จ: ' + driveError.message);
+  } finally {
+    try { if (equipmentProbe) equipmentProbe.setTrashed(true); } catch (ignoreEquipment) {}
+    try { if (profileProbe) profileProbe.setTrashed(true); } catch (ignoreProfile) {}
+  }
 }
 
 // ส่งสำเนารูปจากโฟลเดอร์สำรองกลับไปยังหน้าแอดมินแบบ data URL

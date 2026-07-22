@@ -74,7 +74,7 @@ const Utils = {
   },
 
   // ย่อรูปจากมือถือก่อนส่งไป Google Apps Script เพื่อลดเวลาอัปโหลดและขนาด payload
-  async prepareImageUpload(file, maxSide = 1600, quality = 0.82) {
+  async prepareImageUpload(file, maxSide = 1200, quality = 0.78) {
     if (!file || !String(file.type || '').startsWith('image/')) {
       throw new Error('กรุณาเลือกไฟล์รูปภาพ');
     }
@@ -104,6 +104,7 @@ const Utils = {
 
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
     if (!blob) throw new Error('เตรียมรูปภาพไม่สำเร็จ');
+    if (blob.size > 5 * 1024 * 1024) throw new Error('รูปใหญ่เกินไป กรุณาเลือกรูปที่เล็กกว่า 5 MB');
 
     const compressedDataUrl = await new Promise((resolve, reject) => {
       const reader = new FileReader();
