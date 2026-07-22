@@ -34,7 +34,11 @@ function app() {
       this.loading = true;
       this.env = Utils.detectEnvironment();
 
-      await BawmusicAPI.requireAuth();
+      const authenticated = await BawmusicAPI.requireAuth();
+      if (!authenticated) {
+        this.loading = false;
+        return;
+      }
 
       // ตรวจจับเวลาซ้ำทุก 5 นาที เพื่อสลับธีมอัตโนมัติ (ถ้าผู้ใช้ยังไม่เคยสลับเองด้วยมือ)
       this.themeCheckInterval = setInterval(() => this.autoApplyTheme(), 5 * 60 * 1000);
@@ -61,6 +65,10 @@ function app() {
       try {
         this.settings = await BawmusicAPI.getSettings();
       } catch (e) {
+        if (!BawmusicAPI.getSessionToken()) {
+          this.loading = false;
+          return;
+        }
         console.warn('Could not load settings — check API_URL in js/api.js', e);
       }
       this.loading = false;
