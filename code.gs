@@ -40,7 +40,7 @@ var DRIVE_DEFAULT_FOLDER_IDS = {
 
 // Action ที่เปิดให้เรียกได้โดยไม่ต้องมี session ของแอป (ใช้จากหน้า LIFF ของลูกค้า)
 // การเรียกใช้งานระบบแอดมินต้องส่ง sessionToken ที่ออกโดย createSession
-var PUBLIC_ACTIONS = ['createSession', 'submitLiffBooking', 'verifyAndUpsertMember', 'verifyLineToken', 'getBookingByToken', 'listPublicEquipment'];
+var PUBLIC_ACTIONS = ['createSession', 'submitLiffBooking', 'verifyAndUpsertMember', 'verifyLineToken', 'getBookingByToken', 'listPublicEquipment', 'getMyBookings', 'listPublicSchedule'];
 
 // ---------- ENTRY POINTS ----------
 
@@ -80,6 +80,8 @@ function handleRequest(e, method) {
       case 'deleteBooking': result = deleteBooking(params.id, params.actorId); break;
       case 'checkConflicts': result = checkConflicts(params.data); break;
       case 'getBookingByToken': result = getBookingByToken(params.token); break;
+      case 'getMyBookings': result = getMyBookings(params.idToken, params); break;
+      case 'listPublicSchedule': result = listPublicSchedule(params.month); break;
 
       // Customers
       case 'listCustomers': result = listCustomers(params); break;
@@ -535,6 +537,109 @@ function getBookingByToken(token) {
   var bookings = listBookings({});
   return bookings.find(function (b) { return b.bookingToken === token; }) || null;
 }
+
+// สำหรับ Customer Portal: ตรวจสอบตัวตนจาก LINE ID Token แล้วคืนเฉพาะประวัติของบัญชีนั้น
+// ห้ามรับ lineUserId จาก client เพราะผู้เรียกสามารถปลอมค่าได้
+function getMyBookings(idToken, params) {
+  var profile = verifyLineIdToken(idToken);
+  var customers = listCustomers({});
+  var customer = customers.find(function (c) {
+    return c.memberId && c.memberId === profile.lineUserId;
+  });
+  var bookings = [];
+
+  if (customer) {
+    bookings = listBookings({}).filter(function (b) {
+      return b.customerId === customer.id;
+    }).sort(function (a, b) {
+      var dateDiff = new Date(b.date) - new Date(a.date);
+      if (dateDiff !== 0) return dateDiff;
+      return String(b.startTime || '').localeCompare(String(a.startTime || ''));
+    });
+  }
+
+  var totalCount = bookings.length;
+  var requestedLimit = params && params.limit;
+  var limit = Number(requestedLimit);
+  if (!isFinite(limit) || limit <= 0) limit = 50;
+  limit = Math.min(Math.floor(limit), 100);
+
+  return {
+    profile: {
+      displayName: profile.displayName || '',
+      pictureUrl: profile.pictureUrl || ''
+    },
+    linked: !!customer,
+    bookingCount: totalCount,
+    bookings: bookings.slice(0, limit).map(publicBookingSummary_)
+  };
+}
+
+// ข้อมูลประวัติที่ปลอดภัยสำหรับ Customer Portal
+// ไม่ส่ง customerId, bookingToken, equipment ภายใน หรือข้อมูล Audit ออกไป
+function publicBookingSummary_(booking) {
+  return {
+    date: booking.date || '',
+    startTime: booking.startTime || '',
+    endTime: booking.endTime || '',
+    jobType: booking.jobType || '',
+    status: booking.status || '',
+    venue: booking.venue || '',
+    package: booking.package || '',
+    price: Number(booking.price) || 0,
+    deposit: Number(booking.deposit) || 0,
+    remaining: Number(booking.remaining) || 0,
+    createdAt: booking.createdAt || '',
+    updatedAt: booking.updatedAt || ''
+  };
+}
+
+// Customer Portal เห็นเฉพาะวันที่มีงานยืนยันแล้วในเดือนที่ร้องขอ
+// ไม่ส่งชื่อ สถานที่ เวลา ราคา หรือรายละเอียดการจองออกไป
+function listPublicSchedule(month) {
+  var monthKey = normalizePublicScheduleMonth_(month);
+  var cache = CacheService.getScriptCache();
+  var cacheKey = 'public_schedule_' + monthKey;
+  var cached = cache.get(cacheKey);
+
+  if (cached) {
+    try {
+      return JSON.parse(cached);
+    } catch (ignoreCacheError) {
+      // ถ้า cache เสีย ให้คำนวณจาก Spreadsheet ใหม่
+    }
+  }
+
+  var bookedDates = {};
+  listBookings({}).forEach(function (booking) {
+    var date = String(booking.date || '').substring(0, 10);
+    if (booking.status === 'confirmed' && date.indexOf(monthKey) === 0) {
+      bookedDates[date] = true;
+    }
+  });
+
+  var result = {
+    month: monthKey,
+    bookedDates: Object.keys(bookedDates).sort()
+  };
+
+  // ยอมให้ข้อมูลสาธารณะเก่าที่สุดประมาณ 5 นาที เพื่อลดการอ่านชีตซ้ำ
+  cache.put(cacheKey, JSON.stringify(result), 300);
+  return result;
+}
+
+function normalizePublicScheduleMonth_(month) {
+  var value = String(month || '').trim();
+  if (!value) {
+    var timezone = Session.getScriptTimeZone() || 'Asia/Bangkok';
+    value = Utilities.formatDate(new Date(), timezone, 'yyyy-MM');
+  }
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) {
+    throw new Error('month ต้องอยู่ในรูปแบบ YYYY-MM');
+  }
+  return value;
+}
+
 
 function createBooking(data, actorId) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAMES.BOOKINGS);
