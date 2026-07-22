@@ -1,11 +1,12 @@
 {
-  "name": "Bawmusic Customer Menu",
+  "name": "Bawmusic Customer Menu (ตัวอย่าง 3 ปุ่ม)",
   "size": {
     "width": 2500,
     "height": 1686
   },
   "selected": true,
   "chatBarText": "เมนู Bawmusic",
+  "note": "ไฟล์นี้เป็นตัวอย่างสำหรับ Rich Menu 3 ช่องแนวตั้ง หากใช้ภาพ Rich Menu เดิมแบบ 2x3 ให้คงภาพเดิมไว้และนำ URL ใน actions ไปผูกกับพื้นที่ที่ต้องการ",
   "areas": [
     {
       "bounds": {
@@ -17,7 +18,7 @@
       "action": {
         "type": "uri",
         "label": "จองงานใหม่",
-        "uri": "https://aodxx.github.io/NN-Sound-Bawmusic/liff/index.html"
+        "uri": "https://liff.line.me/2007938843-WTd19n2O"
       }
     },
     {
@@ -30,7 +31,7 @@
       "action": {
         "type": "uri",
         "label": "ประวัติของฉัน",
-        "uri": "https://aodxx.github.io/NN-Sound-Bawmusic/liff/portal.html?tab=history"
+        "uri": "https://liff.line.me/2007938843-kgwzlris/?tab=history"
       }
     },
     {
@@ -43,7 +44,7 @@
       "action": {
         "type": "uri",
         "label": "ตารางงาน",
-        "uri": "https://aodxx.github.io/NN-Sound-Bawmusic/liff/portal.html?tab=schedule"
+        "uri": "https://liff.line.me/2007938843-kgwzlris/?tab=schedule"
       }
     }
   ]
