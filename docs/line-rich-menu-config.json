@@ -1,0 +1,50 @@
+{
+  "name": "Bawmusic Customer Menu",
+  "size": {
+    "width": 2500,
+    "height": 1686
+  },
+  "selected": true,
+  "chatBarText": "เมนู Bawmusic",
+  "areas": [
+    {
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 834,
+        "height": 1686
+      },
+      "action": {
+        "type": "uri",
+        "label": "จองงานใหม่",
+        "uri": "https://aodxx.github.io/NN-Sound-Bawmusic/liff/index.html"
+      }
+    },
+    {
+      "bounds": {
+        "x": 834,
+        "y": 0,
+        "width": 833,
+        "height": 1686
+      },
+      "action": {
+        "type": "uri",
+        "label": "ประวัติของฉัน",
+        "uri": "https://aodxx.github.io/NN-Sound-Bawmusic/liff/portal.html?tab=history"
+      }
+    },
+    {
+      "bounds": {
+        "x": 1667,
+        "y": 0,
+        "width": 833,
+        "height": 1686
+      },
+      "action": {
+        "type": "uri",
+        "label": "ตารางงาน",
+        "uri": "https://aodxx.github.io/NN-Sound-Bawmusic/liff/portal.html?tab=schedule"
+      }
+    }
+  ]
+}
