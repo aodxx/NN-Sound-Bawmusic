@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#08080d">
+  <title>Bawmusic | พื้นที่ของฉัน</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+
+  <style>
+    :root {
+      --bg: #08080d;
+      --surface: #13131f;
+      --surface-2: #1e1e30;
+      --surface-3: #27273b;
+      --line: rgba(255,255,255,.09);
+      --text: #f8fafc;
+      --muted: #a1a1b5;
+      --muted-2: #73738b;
+      --cyan: #22d3ee;
+      --cyan-soft: rgba(34,211,238,.14);
+      --pink: #f637ec;
+      --green: #4ade80;
+      --yellow: #facc15;
+      --red: #fb7185;
+      --shadow: 0 18px 45px rgba(0,0,0,.22);
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html { min-height: 100%; background: var(--bg); }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 10% -5%, rgba(246,55,236,.16), transparent 28rem),
+        radial-gradient(circle at 100% 15%, rgba(34,211,238,.10), transparent 22rem),
+        var(--bg);
+      font-family: "Kanit", sans-serif;
+      overscroll-behavior-y: contain;
+    }
+    button, a { font: inherit; }
+    button { cursor: pointer; }
+    button:disabled { cursor: wait; opacity: .55; }
+
+    .hidden { display: none !important; }
+    .page {
+      width: min(100%, 560px);
+      min-height: 100vh;
+      margin: 0 auto;
+      padding: max(14px, env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom));
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 8px 0 18px;
+    }
+    .brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 48px;
+      height: 48px;
+      flex: 0 0 48px;
+      border-radius: 17px;
+      color: #08080d;
+      background: linear-gradient(135deg, var(--cyan), var(--pink));
+      box-shadow: 0 9px 25px rgba(34,211,238,.22);
+      font-size: 21px;
+    }
+    .brand small {
+      display: block;
+      color: var(--muted-2);
+      font-size: 12px;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+    .brand h1 { margin: 0; color: var(--cyan); font-size: 20px; line-height: 1.1; }
+    .icon-button {
+      display: grid;
+      place-items: center;
+      width: 42px;
+      height: 42px;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      color: var(--cyan);
+      background: rgba(30,30,48,.78);
+    }
+    .icon-button:active { transform: scale(.95); }
+
+    .profile-card {
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      padding: 16px;
+      border: 1px solid rgba(34,211,238,.13);
+      border-radius: 22px;
+      background: linear-gradient(135deg, rgba(30,30,48,.94), rgba(19,19,31,.94));
+      box-shadow: var(--shadow);
+    }
+    .avatar {
+      display: grid;
+      place-items: center;
+      width: 56px;
+      height: 56px;
+      flex: 0 0 56px;
+      overflow: hidden;
+      border: 2px solid rgba(34,211,238,.45);
+      border-radius: 50%;
+      color: var(--cyan);
+      background: var(--surface-3);
+      font-size: 22px;
+    }
+    .avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .profile-card p { margin: 0; color: var(--muted); font-size: 13px; }
+    .profile-card h2 {
+      max-width: 300px;
+      overflow: hidden;
+      margin: 2px 0 3px;
+      color: var(--text);
+      font-size: 19px;
+      line-height: 1.25;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #profile-status { color: var(--green); font-size: 12px; }
+
+    .tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7px;
+      margin: 16px 0;
+      padding: 5px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(19,19,31,.78);
+    }
+    .tab {
+      min-height: 45px;
+      border: 0;
+      border-radius: 14px;
+      color: var(--muted);
+      background: transparent;
+      transition: .18s ease;
+    }
+    .tab i { margin-right: 6px; }
+    .tab.active {
+      color: #081018;
+      background: linear-gradient(135deg, var(--cyan), #7dd3fc);
+      font-weight: 600;
+      box-shadow: 0 7px 18px rgba(34,211,238,.18);
+    }
+
+    .panel {
+      padding: 17px;
+      border: 1px solid var(--line);
+      border-radius: 23px;
+      background: rgba(19,19,31,.86);
+      box-shadow: var(--shadow);
+    }
+    .section-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 15px;
+    }
+    .section-head h3 { margin: 0; font-size: 19px; }
+    .section-head p { margin: 3px 0 0; color: var(--muted-2); font-size: 12px; }
+    .count-badge {
+      padding: 4px 10px;
+      border: 1px solid rgba(34,211,238,.24);
+      border-radius: 999px;
+      color: var(--cyan);
+      background: var(--cyan-soft);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .notice {
+      display: flex;
+      gap: 10px;
+      margin: 0 0 14px;
+      padding: 12px;
+      border: 1px solid rgba(250,204,21,.22);
+      border-radius: 15px;
+      color: #fde68a;
+      background: rgba(250,204,21,.08);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .notice i { margin-top: 3px; }
+    .notice.info {
+      border-color: rgba(34,211,238,.22);
+      color: #a5f3fc;
+      background: var(--cyan-soft);
+    }
+
+    .state {
+      display: grid;
+      place-items: center;
+      min-height: 145px;
+      padding: 22px 10px;
+      color: var(--muted);
+      text-align: center;
+    }
+    .state i.state-icon { margin-bottom: 10px; color: var(--muted-2); font-size: 30px; }
+    .state p { margin: 0; font-size: 14px; }
+    .state small { display: block; max-width: 340px; margin-top: 5px; color: var(--muted-2); font-size: 12px; line-height: 1.5; }
+    .state.error { color: #fecdd3; }
+    .state.error i.state-icon { color: var(--red); }
+    .retry {
+      margin-top: 13px;
+      padding: 9px 15px;
+      border: 1px solid rgba(34,211,238,.28);
+      border-radius: 11px;
+      color: var(--cyan);
+      background: var(--cyan-soft);
+      font-size: 13px;
+    }
+    .spinner {
+      width: 30px;
+      height: 30px;
+      margin-bottom: 12px;
+      border: 3px solid rgba(34,211,238,.18);
+      border-top-color: var(--cyan);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .booking-list { display: grid; gap: 11px; }
+    .booking-card {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 17px;
+      background: linear-gradient(135deg, rgba(39,39,59,.72), rgba(30,30,48,.52));
+    }
+    .booking-card-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 13px 14px 10px;
+      border-bottom: 1px solid var(--line);
+    }
+    .booking-date { color: var(--text); font-size: 16px; font-weight: 600; }
+    .booking-kind { margin-top: 2px; color: var(--muted); font-size: 12px; }
+    .status {
+      padding: 4px 8px;
+      border-radius: 8px;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+    .status.confirmed { color: #bbf7d0; background: rgba(74,222,128,.13); }
+    .status.pending { color: #fde68a; background: rgba(250,204,21,.13); }
+    .status.cancelled { color: #fecdd3; background: rgba(251,113,133,.13); }
+    .status.done { color: #bae6fd; background: rgba(56,189,248,.13); }
+    .booking-body { padding: 11px 14px 13px; }
+    .detail-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 9px;
+      margin: 7px 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .detail-row i { width: 16px; margin-top: 3px; color: var(--cyan); text-align: center; }
+    .detail-row strong { color: var(--text); font-weight: 400; }
+    .money-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 7px;
+      margin-top: 12px;
+      padding-top: 11px;
+      border-top: 1px solid var(--line);
+    }
+    .money-item { min-width: 0; text-align: center; }
+    .money-item small { display: block; color: var(--muted-2); font-size: 10px; }
+    .money-item strong {
+      display: block;
+      overflow: hidden;
+      margin-top: 2px;
+      color: var(--cyan);
+      font-size: 13px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .month-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 15px;
+    }
+    .month-nav strong { color: var(--text); font-size: 16px; }
+    .month-button {
+      display: grid;
+      place-items: center;
+      width: 36px;
+      height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      color: var(--cyan);
+      background: var(--surface-2);
+    }
+    .month-button:active { transform: scale(.95); }
+    .calendar {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 17px;
+      background: rgba(8,8,13,.3);
+    }
+    .weekdays, .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+    }
+    .weekdays {
+      padding: 9px 7px 7px;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted-2);
+      font-size: 11px;
+      text-align: center;
+    }
+    .calendar-grid { gap: 5px; padding: 9px 7px 11px; }
+    .calendar-day {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 48px;
+      padding: 6px 2px 4px;
+      border: 1px solid transparent;
+      border-radius: 11px;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+    }
+    .calendar-day.today { border-color: rgba(34,211,238,.43); color: var(--text); }
+    .calendar-day.booked {
+      border-color: rgba(246,55,236,.35);
+      color: #f5d0fe;
+      background: rgba(246,55,236,.13);
+    }
+    .calendar-day.blank { min-height: 48px; }
+    .day-dot {
+      width: 5px;
+      height: 5px;
+      margin-top: 5px;
+      border-radius: 50%;
+      background: var(--pink);
+      box-shadow: 0 0 8px rgba(246,55,236,.75);
+    }
+    .day-note { margin-top: 3px; color: #f0abfc; font-size: 8px; line-height: 1; }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 13px;
+      color: var(--muted-2);
+      font-size: 11px;
+    }
+    .legend span { display: inline-flex; align-items: center; gap: 5px; }
+    .legend-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--pink); }
+    .legend-dot.today { border: 1px solid var(--cyan); background: transparent; }
+
+    .footer-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 9px;
+      margin-top: 15px;
+    }
+    .footer-button {
+      min-height: 44px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      color: var(--muted);
+      background: rgba(30,30,48,.75);
+      text-decoration: none;
+      text-align: center;
+    }
+    .footer-button.primary {
+      border-color: rgba(34,211,238,.27);
+      color: #081018;
+      background: linear-gradient(135deg, var(--cyan), #7dd3fc);
+      font-weight: 600;
+    }
+    .footer-button i { margin-right: 5px; }
+
+    .toast {
+      position: fixed;
+      right: 16px;
+      bottom: calc(18px + env(safe-area-inset-bottom));
+      left: 16px;
+      z-index: 20;
+      max-width: 528px;
+      margin: auto;
+      padding: 12px 14px;
+      border: 1px solid rgba(251,113,133,.28);
+      border-radius: 13px;
+      color: #ffe4e6;
+      background: #2a1820;
+      box-shadow: var(--shadow);
+      font-size: 13px;
+      text-align: center;
+    }
+
+    @media (max-width: 380px) {
+      .page { padding-right: 12px; padding-left: 12px; }
+      .panel { padding: 14px; }
+      .calendar-day, .calendar-day.blank { min-height: 44px; }
+      .day-note { font-size: 7px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="boot-screen" class="state" style="min-height:100vh">
+    <div>
+      <div class="spinner" style="margin:0 auto 12px"></div>
+      <p id="boot-text">กำลังเชื่อมต่อ LINE...</p>
+      <small>กรุณารอสักครู่ ระบบกำลังยืนยันตัวตนของคุณ</small>
+    </div>
+  </div>
+
+  <div id="error-screen" class="state error hidden" style="min-height:100vh;padding:28px">
+    <div>
+      <i class="fa-solid fa-triangle-exclamation state-icon"></i>
+      <p>เปิดพื้นที่ลูกค้าไม่สำเร็จ</p>
+      <small id="fatal-error-text">กรุณาเปิดลิงก์นี้ผ่านแอป LINE แล้วลองใหม่</small>
+      <button id="fatal-retry" class="retry" type="button"><i class="fa-solid fa-rotate-right"></i> ลองใหม่</button>
+    </div>
+  </div>
+
+  <div id="app" class="page hidden">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark"><i class="fa-solid fa-music"></i></div>
+        <div>
+          <small>พื้นที่ลูกค้า</small>
+          <h1>Bawmusic</h1>
+        </div>
+      </div>
+      <button id="refresh-button" class="icon-button" type="button" aria-label="โหลดข้อมูลใหม่">
+        <i class="fa-solid fa-rotate-right"></i>
+      </button>
+    </header>
+
+    <section class="profile-card" aria-label="ข้อมูลบัญชี LINE">
+      <div id="profile-avatar" class="avatar"><i class="fa-solid fa-user"></i></div>
+      <div>
+        <p>สวัสดีครับ/ค่ะ</p>
+        <h2 id="profile-name">ลูกค้า Bawmusic</h2>
+        <p id="profile-status">กำลังยืนยันบัญชี LINE...</p>
+      </div>
+    </section>
+
+    <nav class="tabs" aria-label="เมนูลูกค้า">
+      <button class="tab active" type="button" data-tab="history" aria-selected="true">
+        <i class="fa-solid fa-clock-rotate-left"></i>ประวัติของฉัน
+      </button>
+      <button class="tab" type="button" data-tab="schedule" aria-selected="false">
+        <i class="fa-solid fa-calendar-days"></i>ตารางงาน
+      </button>
+    </nav>
+
+    <main>
+      <section id="history-panel" class="panel">
+        <div class="section-head">
+          <div>
+            <h3>ประวัติของฉัน</h3>
+            <p>รายการจองที่เชื่อมกับบัญชี LINE นี้</p>
+          </div>
+          <span id="booking-count" class="count-badge">กำลังโหลด</span>
+        </div>
+        <div id="history-alert" class="notice hidden"></div>
+        <div id="history-state" class="state">
+          <div>
+            <div class="spinner" style="margin:0 auto 12px"></div>
+            <p>กำลังโหลดประวัติการจอง...</p>
+          </div>
+        </div>
+        <div id="history-list" class="booking-list hidden"></div>
+      </section>
+
+      <section id="schedule-panel" class="panel hidden">
+        <div class="section-head">
+          <div>
+            <h3>ตารางงาน</h3>
+            <p>แสดงเฉพาะวันที่มีงานยืนยันแล้ว</p>
+          </div>
+        </div>
+
+        <div class="month-nav">
+          <button id="previous-month" class="month-button" type="button" aria-label="เดือนก่อนหน้า">
+            <i class="fa-solid fa-chevron-left"></i>
+          </button>
+          <strong id="month-label">กำลังโหลด</strong>
+          <button id="next-month" class="month-button" type="button" aria-label="เดือนถัดไป">
+            <i class="fa-solid fa-chevron-right"></i>
+          </button>
+        </div>
+
+        <div id="schedule-state" class="state hidden">
+          <div>
+            <div class="spinner" style="margin:0 auto 12px"></div>
+            <p>กำลังโหลดตารางงาน...</p>
+          </div>
+        </div>
+
+        <div id="calendar-wrap" class="calendar hidden">
+          <div class="weekdays">
+            <span>อา</span><span>จ</span><span>อ</span><span>พ</span><span>พฤ</span><span>ศ</span><span>ส</span>
+          </div>
+          <div id="calendar-grid" class="calendar-grid"></div>
+        </div>
+        <div class="legend">
+          <span><i class="legend-dot"></i>มีงานยืนยันแล้ว</span>
+          <span><i class="legend-dot today"></i>วันนี้</span>
+        </div>
+        <div id="schedule-message" class="notice info hidden" style="margin-top:13px;margin-bottom:0">
+          <i class="fa-solid fa-circle-info"></i>
+          <span>หน้านี้แสดงเพียงวันที่มีงาน ไม่เปิดเผยชื่อลูกค้า สถานที่ เวลา หรือรายละเอียดการจอง</span>
+        </div>
+      </section>
+    </main>
+
+    <div class="footer-actions">
+      <a class="footer-button primary" href="index.html"><i class="fa-solid fa-calendar-plus"></i>จองงานใหม่</a>
+      <button id="close-button" class="footer-button" type="button"><i class="fa-solid fa-xmark"></i>กลับไปที่ LINE</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden" role="status"></div>
+
+  <script>
+    // ใช้ Web App URL เดียวกับแอปแอดมินและหน้า LIFF จองคิว
+    var API_URL = 'https://script.google.com/macros/s/AKfycbwczdEBiHu3bECE1OeeOzMKcIpB7Ed8oLAD0O3DbjDeuFM5drKH0JW_aJtN_Y2uYfXDBA/exec';
+    // LIFF ID เดียวกับหน้า liff/index.html
+    var LIFF_ID = '2007938843-WTd19n2O';
+
+    var state = {
+      idToken: '',
+      profile: null,
+      tab: 'history',
+      month: monthKey(new Date()),
+      history: null,
+      schedule: {}
+    };
+
+    var JOB_LABELS = {
+      Wedding: 'งานแต่ง',
+      Ordination: 'งานบวช',
+      Funeral: 'งานศพ',
+      Corporate: 'งานองค์กร',
+      Birthday: 'งานวันเกิด',
+      Concert: 'คอนเสิร์ต',
+      Custom: 'งานอื่นๆ'
+    };
+
+    var STATUS_LABELS = {
+      pending: 'รอตรวจสอบ',
+      confirmed: 'ยืนยันแล้ว',
+      cancelled: 'ยกเลิกแล้ว',
+      completed: 'เสร็จสิ้น',
+      done: 'เสร็จสิ้น'
+    };
+
+    function byId(id) {
+      return document.getElementById(id);
+    }
+
+    function escapeHtml(value) {
+      return String(value == null ? '' : value).replace(/[&<>'"]/g, function (character) {
+        return {
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          "'": '&#39;',
+          '"': '&quot;'
+        }[character];
+      });
+    }
+
+    function monthKey(date) {
+      return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0');
+    }
+
+    function dateKey(year, month, day) {
+      return year + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+    }
+
+    function parseDate(value) {
+      var text = String(value || '').substring(0, 10);
+      if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(text)) return null;
+      var parts = text.split('-').map(Number);
+      return new Date(parts[0], parts[1] - 1, parts[2]);
+    }
+
+    function formatDateThai(value) {
+      var date = parseDate(value);
+      if (!date) return value || '-';
+      return date.toLocaleDateString('th-TH', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+      });
+    }
+
+    function formatMonthThai(value) {
+      var parts = String(value).split('-').map(Number);
+      if (parts.length !== 2 || !parts[0] || !parts[1]) return value;
+      return new Date(parts[0], parts[1] - 1, 1).toLocaleDateString('th-TH', {
+        month: 'long',
+        year: 'numeric'
+      });
+    }
+
+    function formatMoney(value) {
+      var amount = Number(value);
+      if (!isFinite(amount) || amount <= 0) return '-';
+      return amount.toLocaleString('th-TH') + ' บาท';
+    }
+
+    function jobLabel(value) {
+      return JOB_LABELS[value] || value || 'งานอื่นๆ';
+    }
+
+    function statusLabel(value) {
+      return STATUS_LABELS[value] || value || 'ไม่ระบุสถานะ';
+    }
+
+    function statusClass(value) {
+      if (value === 'confirmed') return 'confirmed';
+      if (value === 'cancelled') return 'cancelled';
+      if (value === 'completed' || value === 'done') return 'done';
+      return 'pending';
+    }
+
+    function showToast(message) {
+      var toast = byId('toast');
+      toast.textContent = message;
+      toast.classList.remove('hidden');
+      clearTimeout(showToast.timer);
+      showToast.timer = setTimeout(function () {
+        toast.classList.add('hidden');
+      }, 4200);
+    }
+
+    function setBootText(message) {
+      byId('boot-text').textContent = message;
+    }
+
+    function showFatalError(message) {
+      byId('fatal-error-text').textContent = message || 'กรุณาเปิดลิงก์นี้ผ่านแอป LINE แล้วลองใหม่';
+      byId('boot-screen').classList.add('hidden');
+      byId('app').classList.add('hidden');
+      byId('error-screen').classList.remove('hidden');
+    }
+
+    function showApp() {
+      byId('boot-screen').classList.add('hidden');
+      byId('error-screen').classList.add('hidden');
+      byId('app').classList.remove('hidden');
+    }
+
+    async function fetchWithTimeout(url, options, timeoutMs) {
+      var controller = typeof AbortController === 'undefined' ? null : new AbortController();
+      var timeoutId = controller ? setTimeout(function () { controller.abort(); }, timeoutMs || 15000) : null;
+      try {
+        if (controller) options.signal = controller.signal;
+        var response = await fetch(url, options);
+        if (!response.ok) throw new Error('เซิร์ฟเวอร์ตอบกลับผิดพลาด (' + response.status + ')');
+        return response;
+      } catch (error) {
+        if (error && error.name === 'AbortError') {
+          throw new Error('การเชื่อมต่อใช้เวลานานเกินไป กรุณาลองใหม่');
+        }
+        throw error;
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+      }
+    }
+
+    async function callApi(action, params, method) {
+      var requestParams = params || {};
+      var url = API_URL;
+      var options;
+
+      if (method === 'GET') {
+        var query = new URLSearchParams();
+        query.set('action', action);
+        Object.keys(requestParams).forEach(function (key) {
+          query.set(key, String(requestParams[key]));
+        });
+        url += '?' + query.toString();
+        options = { method: 'GET' };
+      } else {
+        options = {
+          method: 'POST',
+          body: JSON.stringify(Object.assign({ action: action }, requestParams)),
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+        };
+      }
+
+      var response = await fetchWithTimeout(url, options, 20000);
+      var payload;
+      try {
+        payload = await response.json();
+      } catch (error) {
+        throw new Error('ระบบส่งข้อมูลกลับมาไม่ถูกต้อง');
+      }
+      if (!payload.success) throw new Error(payload.error || 'ไม่สามารถโหลดข้อมูลได้');
+      return payload.data;
+    }
+
+    function updateProfile(profile) {
+      if (!profile) return;
+      if (profile.displayName) byId('profile-name').textContent = profile.displayName;
+      if (profile.pictureUrl) {
+        var avatar = byId('profile-avatar');
+        avatar.innerHTML = '<img src="' + escapeHtml(profile.pictureUrl) + '" alt="รูปโปรไฟล์ LINE">';
+        avatar.querySelector('img').addEventListener('error', function () {
+          avatar.innerHTML = '<i class="fa-solid fa-user"></i>';
+        });
+      }
+    }
+
+    function setHistoryState(type, message, detail) {
+      var stateBox = byId('history-state');
+      var list = byId('history-list');
+      stateBox.className = 'state';
+      list.classList.add('hidden');
+
+      if (type === 'hidden') {
+        stateBox.classList.add('hidden');
+        return;
+      }
+      if (type === 'loading') {
+        stateBox.innerHTML = '<div><div class="spinner" style="margin:0 auto 12px"></div><p>กำลังโหลดประวัติการจอง...</p></div>';
+        return;
+      }
+      if (type === 'error') {
+        stateBox.classList.add('error');
+        stateBox.innerHTML = '<div><i class="fa-solid fa-triangle-exclamation state-icon"></i><p>' +
+          escapeHtml(message || 'โหลดประวัติไม่สำเร็จ') + '</p><small>' +
+          escapeHtml(detail || 'ตรวจสอบการเชื่อมต่อแล้วลองใหม่') +
+          '</small><button id="retry-history" class="retry" type="button"><i class="fa-solid fa-rotate-right"></i> ลองโหลดใหม่</button></div>';
+        byId('retry-history').onclick = loadHistory;
+        return;
+      }
+      stateBox.innerHTML = '<div><i class="fa-solid fa-calendar-check state-icon"></i><p>' +
+        escapeHtml(message || 'ยังไม่มีประวัติการจอง') + '</p><small>' +
+        escapeHtml(detail || '') + '</small></div>';
+    }
+
+    function renderBooking(booking) {
+      var status = String(booking.status || '');
+      var money = '';
+      if (status === 'confirmed' || status === 'completed' || status === 'done') {
+        money = '<div class="money-row">' +
+          '<div class="money-item"><small>ราคารวม</small><strong>' + escapeHtml(formatMoney(booking.price)) + '</strong></div>' +
+          '<div class="money-item"><small>มัดจำแล้ว</small><strong>' + escapeHtml(formatMoney(booking.deposit)) + '</strong></div>' +
+          '<div class="money-item"><small>คงเหลือ</small><strong>' + escapeHtml(formatMoney(booking.remaining)) + '</strong></div>' +
+        '</div>';
+      }
+
+      var time = [booking.startTime, booking.endTime].filter(Boolean).join(' - ') || 'รอระบุเวลา';
+      var venue = booking.venue || 'รอระบุสถานที่';
+      var packageText = booking.package ? '<div class="detail-row"><i class="fa-solid fa-layer-group"></i><span>แพ็กเกจ: <strong>' + escapeHtml(booking.package) + '</strong></span></div>' : '';
+
+      return '<article class="booking-card">' +
+        '<div class="booking-card-head">' +
+          '<div><div class="booking-date">' + escapeHtml(formatDateThai(booking.date)) + '</div>' +
+          '<div class="booking-kind">' + escapeHtml(jobLabel(booking.jobType)) + '</div></div>' +
+          '<span class="status ' + statusClass(status) + '">' + escapeHtml(statusLabel(status)) + '</span>' +
+        '</div>' +
+        '<div class="booking-body">' +
+          '<div class="detail-row"><i class="fa-regular fa-clock"></i><span>เวลา: <strong>' + escapeHtml(time) + '</strong></span></div>' +
+          '<div class="detail-row"><i class="fa-solid fa-location-dot"></i><span>สถานที่: <strong>' + escapeHtml(venue) + '</strong></span></div>' +
+          packageText +
+          (status === 'pending' ? '<div class="detail-row"><i class="fa-solid fa-hourglass-half"></i><span><strong>ทางวงกำลังตรวจสอบคิวและจะแจ้งรายละเอียดกลับ</strong></span></div>' : '') +
+          money +
+        '</div>' +
+      '</article>';
+    }
+
+    async function loadHistory() {
+      setHistoryState('loading');
+      byId('booking-count').textContent = 'กำลังโหลด';
+      byId('history-alert').classList.add('hidden');
+
+      try {
+        var data = await callApi('getMyBookings', { idToken: state.idToken, limit: 100 }, 'POST');
+        state.history = data;
+        updateProfile(data.profile);
+        byId('booking-count').textContent = String(Number(data.bookingCount) || 0) + ' รายการ';
+
+        if (!data.linked) {
+          byId('history-alert').innerHTML = '<i class="fa-solid fa-link"></i><span>ยังไม่พบข้อมูลลูกค้าที่เชื่อมกับบัญชี LINE นี้ หากเพิ่งเพิ่มเพื่อนหรือเพิ่งจองผ่าน LINE กรุณาลองโหลดใหม่อีกครั้ง</span>';
+          byId('history-alert').classList.remove('hidden');
+        }
+
+        if (!Array.isArray(data.bookings) || data.bookings.length === 0) {
+          setHistoryState('empty', 'ยังไม่มีประวัติการจอง', data.linked ? 'เมื่อมีการจองผ่านบัญชี LINE รายการจะแสดงที่หน้านี้' : 'ระบบจะแสดงประวัติหลังบัญชี LINE ถูกเชื่อมกับรายการลูกค้า');
+          return;
+        }
+
+        byId('history-state').classList.add('hidden');
+        byId('history-list').innerHTML = data.bookings.map(renderBooking).join('');
+        byId('history-list').classList.remove('hidden');
+        byId('profile-status').textContent = 'เชื่อมต่อบัญชี LINE แล้ว';
+      } catch (error) {
+        byId('profile-status').textContent = 'เชื่อมต่อแล้ว แต่โหลดประวัติไม่สำเร็จ';
+        setHistoryState('error', 'โหลดประวัติไม่สำเร็จ', error.message || 'ตรวจสอบการเชื่อมต่อแล้วลองใหม่');
+      }
+    }
+
+    function setScheduleState(type, message, detail) {
+      var stateBox = byId('schedule-state');
+      var calendar = byId('calendar-wrap');
+      var messageBox = byId('schedule-message');
+      stateBox.className = 'state';
+      calendar.classList.add('hidden');
+      messageBox.classList.add('hidden');
+
+      if (type === 'loading') {
+        stateBox.innerHTML = '<div><div class="spinner" style="margin:0 auto 12px"></div><p>กำลังโหลดตารางงาน...</p></div>';
+        return;
+      }
+      if (type === 'error') {
+        stateBox.classList.add('error');
+        stateBox.innerHTML = '<div><i class="fa-solid fa-triangle-exclamation state-icon"></i><p>' +
+          escapeHtml(message || 'โหลดตารางงานไม่สำเร็จ') + '</p><small>' +
+          escapeHtml(detail || 'ตรวจสอบการเชื่อมต่อแล้วลองใหม่') +
+          '</small><button id="retry-schedule" class="retry" type="button"><i class="fa-solid fa-rotate-right"></i> ลองโหลดใหม่</button></div>';
+        byId('retry-schedule').onclick = loadSchedule;
+        return;
+      }
+      stateBox.classList.add('hidden');
+      calendar.classList.remove('hidden');
+      messageBox.classList.remove('hidden');
+    }
+
+    function renderCalendar(month, bookedDates) {
+      var parts = month.split('-').map(Number);
+      var year = parts[0];
+      var monthNumber = parts[1];
+      var firstDay = new Date(year, monthNumber - 1, 1).getDay();
+      var dayCount = new Date(year, monthNumber, 0).getDate();
+      var todayKey = monthKey(new Date());
+      var booked = {};
+      (bookedDates || []).forEach(function (date) { booked[String(date).substring(0, 10)] = true; });
+
+      byId('month-label').textContent = formatMonthThai(month);
+      var html = '';
+      for (var blank = 0; blank < firstDay; blank++) {
+        html += '<div class="calendar-day blank" aria-hidden="true"></div>';
+      }
+      for (var day = 1; day <= dayCount; day++) {
+        var key = dateKey(year, monthNumber, day);
+        var isBooked = !!booked[key];
+        var isToday = key === new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0') + '-' + String(new Date().getDate()).padStart(2, '0');
+        html += '<div class="calendar-day' + (isBooked ? ' booked' : '') + (isToday ? ' today' : '') + '"' +
+          ' aria-label="' + escapeHtml(formatDateThai(key) + (isBooked ? ' มีงานยืนยันแล้ว' : '')) + '">' +
+          '<span>' + day + '</span>' +
+          (isBooked ? '<span class="day-dot"></span><span class="day-note">มีงาน</span>' : '') +
+        '</div>';
+      }
+      byId('calendar-grid').innerHTML = html;
+    }
+
+    async function loadSchedule() {
+      setScheduleState('loading');
+      try {
+        var data = await callApi('listPublicSchedule', { month: state.month }, 'GET');
+        state.schedule[state.month] = data;
+        renderCalendar(state.month, data.bookedDates);
+        setScheduleState('ready');
+      } catch (error) {
+        setScheduleState('error', 'โหลดตารางงานไม่สำเร็จ', error.message || 'ตรวจสอบการเชื่อมต่อแล้วลองใหม่');
+      }
+    }
+
+    function changeMonth(delta) {
+      var parts = state.month.split('-').map(Number);
+      state.month = monthKey(new Date(parts[0], parts[1] - 1 + delta, 1));
+      loadSchedule();
+    }
+
+    function setTab(tab) {
+      state.tab = tab === 'schedule' ? 'schedule' : 'history';
+      document.querySelectorAll('.tab').forEach(function (button) {
+        var active = button.getAttribute('data-tab') === state.tab;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+      byId('history-panel').classList.toggle('hidden', state.tab !== 'history');
+      byId('schedule-panel').classList.toggle('hidden', state.tab !== 'schedule');
+      if (state.tab === 'schedule' && !state.schedule[state.month]) loadSchedule();
+      try {
+        var url = new URL(window.location.href);
+        url.searchParams.set('tab', state.tab);
+        window.history.replaceState({}, '', url.toString());
+      } catch (ignore) {}
+    }
+
+    function bindEvents() {
+      document.querySelectorAll('.tab').forEach(function (button) {
+        button.addEventListener('click', function () { setTab(button.getAttribute('data-tab')); });
+      });
+      byId('previous-month').onclick = function () { changeMonth(-1); };
+      byId('next-month').onclick = function () { changeMonth(1); };
+      byId('refresh-button').onclick = function () {
+        if (state.tab === 'history') loadHistory();
+        else loadSchedule();
+      };
+      byId('fatal-retry').onclick = function () { window.location.reload(); };
+      byId('close-button').onclick = function () {
+        if (window.liff && liff.isInClient()) liff.closeWindow();
+        else window.location.href = 'https://line.me';
+      };
+    }
+
+    async function initLiff() {
+      if (API_URL.indexOf('YOUR_DEPLOYMENT_ID') !== -1) {
+        throw new Error('ยังไม่ได้ตั้งค่า API URL');
+      }
+      setBootText('กำลังเชื่อมต่อ LINE...');
+      await liff.init({ liffId: LIFF_ID });
+      if (!liff.isLoggedIn()) {
+        liff.login({ redirectUri: window.location.href });
+        return false;
+      }
+
+      setBootText('กำลังยืนยันตัวตน...');
+      state.idToken = liff.getIDToken();
+      if (!state.idToken) throw new Error('ไม่สามารถดึง LINE ID Token ได้ กรุณาตรวจสอบ Scope openid ของ LIFF');
+
+      try {
+        state.profile = await liff.getProfile();
+        updateProfile(state.profile);
+      } catch (profileError) {
+        console.warn('LIFF getProfile failed:', profileError);
+      }
+
+      showApp();
+      setBootText('พร้อมใช้งาน');
+      var queryTab = new URLSearchParams(window.location.search).get('tab');
+      setTab(queryTab === 'schedule' ? 'schedule' : 'history');
+
+      await Promise.allSettled([loadHistory(), loadSchedule()]);
+      return true;
+    }
+
+    bindEvents();
+    initLiff().catch(function (error) {
+      console.error('Customer Portal init failed:', error);
+      showFatalError(error.message || 'ไม่สามารถเปิดพื้นที่ลูกค้าได้');
+    });
+  </script>
+</body>
+</html>
