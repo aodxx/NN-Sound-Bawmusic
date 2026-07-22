@@ -62,10 +62,12 @@
     <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-gold to-neon text-navy-dark text-2xl"><i class="fa-solid fa-lock"></i></div>
     <h2 class="text-lg font-bold text-white">เข้าสู่ระบบ Bawmusic</h2>
     <p class="mt-2 text-sm text-gray-400">กรอกรหัสเข้าใช้งานระบบเพื่อเข้าถึงข้อมูลการจองและการเงิน</p>
-    <input id="access-code" type="text" inputmode="numeric" autocomplete="off" placeholder="รหัสเข้าใช้งาน" aria-label="รหัสเข้าใช้งาน" class="mt-5 w-full rounded-xl border border-cyan-300/30 bg-slate-900 px-4 py-3 text-center text-white outline-none">
-    <button id="access-submit" type="button" class="mt-3 w-full rounded-xl bg-cyan-400 px-4 py-3 font-semibold text-slate-950">เข้าใช้งานระบบ</button>
-    <p id="auth-status" class="mt-3 min-h-5 text-sm font-medium text-cyan-700"></p>
-    <p id="auth-error" class="mt-2 text-sm font-medium text-red-600"></p>
+    <form id="auth-form" class="mt-5" novalidate>
+      <input id="access-code" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="รหัสเข้าใช้งาน" aria-label="รหัสเข้าใช้งาน" class="w-full rounded-xl border border-cyan-300/30 bg-slate-900 px-4 py-3 text-center text-white outline-none" style="color:#fff !important; -webkit-text-fill-color:#fff; caret-color:#22d3ee; background-color:#0f172a; font-size:1.15rem; letter-spacing:.18em;">
+      <button id="access-submit" type="submit" class="mt-3 w-full rounded-xl bg-cyan-400 px-4 py-3 font-semibold text-slate-950 disabled:cursor-wait disabled:opacity-60">เข้าใช้งานระบบ</button>
+    </form>
+    <p id="auth-status" aria-live="polite" class="mt-3 min-h-5 text-sm font-medium text-cyan-700"></p>
+    <p id="auth-error" aria-live="assertive" class="mt-2 min-h-5 text-sm font-medium text-red-600"></p>
   </div>
 </div>
 
@@ -170,7 +172,7 @@
 <!-- Toast container handled by SweetAlert2 -->
 
 <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-<script src="js/api.js?v=3.3.3"></script>
+<script src="js/api.js?v=3.3.4"></script>
 <script src="js/utils.js?v=3.3.0"></script>
 <script>
   // ดักจับ error ที่ไม่ถูกจัดการทั้งหมด แสดงผลให้เห็นแทนหน้าจอขาวเงียบๆ
@@ -196,12 +198,12 @@
 <script src="js/views/settings.js"></script>
 <script src="js/views/bookingForm.js?v=3.3.0"></script>
 <script src="js/views/jobSummary.js"></script>
-<script src="js/app.js?v=3.3.3"></script>
+<script src="js/app.js?v=3.3.4"></script>
 
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {
-      navigator.serviceWorker.register('service-worker.js?v=3.3.3').catch(function (e) { console.warn('SW registration failed', e); });
+      navigator.serviceWorker.register('service-worker.js?v=3.3.4').catch(function (e) { console.warn('SW registration failed', e); });
     });
   }
 </script>
