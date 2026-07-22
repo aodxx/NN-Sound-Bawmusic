@@ -36,6 +36,12 @@ function app() {
     async init() {
       window.__app = this;
       this.loading = true;
+      if (!this.ensureApiCompatibility()) {
+        this.loadingTimedOut = true;
+        this.loadingMessage = 'ไฟล์ระบบโหลดไม่ครบ';
+        this.loadingDetail = 'กรุณากด “ลองโหลดใหม่” เพื่อรีเฟรชไฟล์ระบบ';
+        return;
+      }
       this.loadingMessage = 'กำลังตรวจสอบการเข้าสู่ระบบ...';
       this.loadingDetail = '';
       this.loadingTimedOut = false;
@@ -107,8 +113,37 @@ function app() {
         });
     },
 
-    retryLoading() {
-      window.location.reload();
+    ensureApiCompatibility() {
+      if (typeof BawmusicAPI === 'undefined') return false;
+      // รองรับกรณี Service Worker ส่ง api.js รุ่นเก่ามาคู่กับ app.js รุ่นใหม่
+      if (typeof BawmusicAPI.getSessionToken !== 'function') {
+        BawmusicAPI.getSessionToken = () => localStorage.getItem('bawmusic_session_token') || '';
+      }
+      if (typeof BawmusicAPI.setSessionToken !== 'function') {
+        BawmusicAPI.setSessionToken = (token) => {
+          if (token) localStorage.setItem('bawmusic_session_token', token);
+          else localStorage.removeItem('bawmusic_session_token');
+        };
+      }
+      return typeof BawmusicAPI.requireAuth === 'function'
+        && typeof BawmusicAPI.call === 'function';
+    },
+
+    async retryLoading() {
+      this.loadingMessage = 'กำลังล้างไฟล์แคชเก่า...';
+      try {
+        if ('serviceWorker' in navigator) {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(registrations.map((registration) => registration.unregister()));
+        }
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map((key) => caches.delete(key)));
+        }
+      } catch (e) {
+        console.warn('Could not clear app cache:', e);
+      }
+      window.location.replace(window.location.pathname + '?refresh=' + Date.now());
     },
 
     isStandalone() {
