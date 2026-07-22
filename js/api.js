@@ -11,7 +11,7 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbykgZIfxTQ3652WNWaES0ZP
 const AUTH_STORAGE_KEY = 'bawmusic_session_token';
 
 const BawmusicAPI = {
-  async call(action, params = {}, isPost = false, timeoutMs = 30000) {
+  async call(action, params = {}, isPost = false, timeoutMs = 12000) {
     let timeoutId = null;
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
     try {
@@ -192,7 +192,7 @@ const BawmusicAPI = {
   createEquipment: (data) => BawmusicAPI.call('createEquipment', { data }, true),
   updateEquipment: (id, data) => BawmusicAPI.call('updateEquipment', { id, data }, true),
   deleteEquipment: (id) => BawmusicAPI.call('deleteEquipment', { id }, true),
-  uploadEquipmentImage: (equipmentId, data) => BawmusicAPI.call('uploadEquipmentImage', { data: { equipmentId, ...data } }, true),
+  uploadEquipmentImage: (equipmentId, data) => BawmusicAPI.call('uploadEquipmentImage', { data: { equipmentId, ...data } }, true, 60000),
 
   // Templates
   listTemplates: () => BawmusicAPI.call('listTemplates', {}, true),
