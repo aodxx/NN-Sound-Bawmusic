@@ -27,6 +27,7 @@ var EQUIPMENT_HEADERS = ['id', 'name', 'category', 'availableQty', 'unit', 'rema
 var PAYMENTS_HEADERS = ['id', 'bookingId', 'amount', 'type', 'paymentDate', 'evidenceUrl', 'notes', 'createdAt'];
 var AUDIT_LOG_HEADERS = ['id', 'actorId', 'action', 'entity', 'beforeData', 'afterData', 'timestamp'];
 var DB_SCHEMA_VERSION = '3.4.0';
+var DRIVE_WRITE_SCOPE = 'https://www.googleapis.com/auth/drive';
 
 // โฟลเดอร์ที่สร้างไว้ใน Google Drive ของ Bawmusic
 // สามารถกำหนดค่าใหม่ผ่าน Script Properties ได้ภายหลัง โดยใช้ key เดิม
@@ -348,7 +349,11 @@ function sheetToObjectsByKey(sheet, keyField) {
   return rows.map(function (row) {
     var obj = {};
     headers.forEach(function (h, i) {
-      obj[h] = normalizeApiDate(h, row[i]);
+      // รองรับชีตเก่าที่อาจมีชื่อคอลัมน์ซ้ำ โดยเก็บค่าที่ไม่ว่างไว้ก่อน
+      var value = normalizeApiDate(h, row[i]);
+      if (!Object.prototype.hasOwnProperty.call(obj, h) || obj[h] === '' || obj[h] === null || obj[h] === undefined) {
+        obj[h] = value;
+      }
     });
     return obj;
   }).filter(function (obj) { return obj[keyField]; });
@@ -671,7 +676,18 @@ function listPublicEquipment() {
 function createEquipment(data) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAMES.EQUIPMENT);
   var id = genId();
-  sheet.appendRow([id, data.name, data.category || '', data.availableQty || 0, data.unit || 'ชิ้น', data.remarks || '', '', '', '', '']);
+  var values = {
+    id: id,
+    name: data.name,
+    category: data.category || '',
+    availableQty: data.availableQty || 0,
+    unit: data.unit || 'ชิ้น',
+    remarks: data.remarks || ''
+  };
+  var headers = getHeaders(sheet);
+  sheet.appendRow(headers.map(function (header) {
+    return Object.prototype.hasOwnProperty.call(values, header) ? values[header] : '';
+  }));
   return { id: id };
 }
 
@@ -715,26 +731,31 @@ function uploadEquipmentImage(data) {
   if (rawBase64.length > 8 * 1024 * 1024) throw new Error('รูปใหญ่เกินไป กรุณาเลือกรูปที่เล็กกว่า 6 MB');
 
   var fileName = sanitizeDriveFileName_(data.fileName || ('equipment-' + equipment.id + extensionForMime_(mimeType)));
-  var blob = Utilities.newBlob(Utilities.base64Decode(rawBase64), mimeType, fileName);
+  var blob;
+  try {
+    blob = Utilities.newBlob(Utilities.base64Decode(rawBase64), mimeType, fileName);
+  } catch (decodeError) {
+    throw new Error('ข้อมูลรูปภาพจากแอปไม่สมบูรณ์ กรุณาเลือกรูปใหม่: ' + decodeError.message);
+  }
   var folder;
   try {
     folder = DriveApp.getFolderById(requireDriveFolderId_(getDriveConfig_(), 'equipmentFolderId', 'DRIVE_EQUIPMENT_FOLDER_ID'));
   } catch (driveError) {
-    throw new Error('เข้าถึงโฟลเดอร์ Google Drive สำหรับอุปกรณ์ไม่ได้ กรุณาตรวจสอบสิทธิ์ของบัญชีที่ Deploy Apps Script: ' + driveError.message);
+    throw new Error(formatDriveError_('เข้าถึงโฟลเดอร์ Google Drive สำหรับอุปกรณ์ไม่ได้', driveError));
   }
   var file;
   try {
     file = folder.createFile(blob);
   } catch (createError) {
-    throw new Error('สร้างไฟล์ใน Google Drive ไม่สำเร็จ: ' + createError.message);
+    throw new Error(formatDriveError_('สร้างไฟล์ใน Google Drive ไม่สำเร็จ', createError));
   }
 
   try {
     // รูปอุปกรณ์ต้องเปิดดูได้จากหน้า GitHub Pages/LIFF ของลูกค้า
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   } catch (sharingError) {
-    file.setTrashed(true);
-    throw new Error('สร้างไฟล์แล้ว แต่เปิดสิทธิ์ดูรูปจาก Google Drive ไม่สำเร็จ: ' + sharingError.message);
+    trashDriveFile_(file.getId());
+    throw new Error(formatDriveError_('สร้างไฟล์แล้ว แต่เปิดสิทธิ์ดูรูปจาก Google Drive ไม่สำเร็จ', sharingError));
   }
 
   var update = {
@@ -746,7 +767,7 @@ function uploadEquipmentImage(data) {
   try {
     updateEquipment(equipment.id, update);
   } catch (sheetError) {
-    file.setTrashed(true);
+    trashDriveFile_(file.getId());
     throw new Error('อัปโหลดไฟล์แล้ว แต่บันทึกลิงก์ลง Google Sheets ไม่สำเร็จ: ' + sheetError.message);
   }
   if (equipment.imageFileId && equipment.imageFileId !== file.getId()) trashDriveFile_(equipment.imageFileId);
@@ -772,12 +793,14 @@ function requireDriveFolderId_(config, key, propertyName) {
 
 function authorizeDriveAccess() {
   var config = getDriveConfig_();
-  var equipmentFolder = DriveApp.getFolderById(requireDriveFolderId_(config, 'equipmentFolderId', 'DRIVE_EQUIPMENT_FOLDER_ID'));
-  var profileFolder = DriveApp.getFolderById(requireDriveFolderId_(config, 'profileBackupFolderId', 'DRIVE_PROFILE_BACKUP_FOLDER_ID'));
+  var equipmentFolder;
+  var profileFolder;
   var equipmentProbe = null;
   var profileProbe = null;
 
   try {
+    equipmentFolder = DriveApp.getFolderById(requireDriveFolderId_(config, 'equipmentFolderId', 'DRIVE_EQUIPMENT_FOLDER_ID'));
+    profileFolder = DriveApp.getFolderById(requireDriveFolderId_(config, 'profileBackupFolderId', 'DRIVE_PROFILE_BACKUP_FOLDER_ID'));
     // ทดสอบสิทธิ์ที่จำเป็นจริง: สร้างไฟล์ ลองเปิดลิงก์ และลบไฟล์ทดสอบ
     equipmentProbe = equipmentFolder.createFile(
       Utilities.newBlob('Bawmusic Drive access test', 'text/plain', '.bawmusic-equipment-access-test-' + Utilities.getUuid() + '.txt')
@@ -796,11 +819,22 @@ function authorizeDriveAccess() {
       profileBackupFolder: profileFolder.getName()
     };
   } catch (driveError) {
-    throw new Error('เข้าถึง Drive ได้ แต่ทดสอบสร้าง/เปิดสิทธิ์ไฟล์ไม่สำเร็จ: ' + driveError.message);
+    throw new Error(formatDriveError_('เข้าถึง Drive ได้ แต่ทดสอบสร้าง/เปิดสิทธิ์ไฟล์ไม่สำเร็จ', driveError));
   } finally {
     try { if (equipmentProbe) equipmentProbe.setTrashed(true); } catch (ignoreEquipment) {}
     try { if (profileProbe) profileProbe.setTrashed(true); } catch (ignoreProfile) {}
   }
+}
+
+function formatDriveError_(prefix, error) {
+  var message = String(error && error.message ? error.message : error || 'ไม่ทราบสาเหตุ');
+  if (/Required permissions:\s*https:\/\/www\.googleapis\.com\/auth\/drive|permission to call DriveApp\.(Folder\.)?createFile/i.test(message)) {
+    return prefix + ': Apps Script ยังไม่ได้รับ OAuth Scope สำหรับเขียน Google Drive (' + DRIVE_WRITE_SCOPE + ') กรุณาเปิด appsscript.json เพิ่ม scope นี้ บันทึกโปรเจกต์ แล้วกด Run authorizeDriveAccess ด้วยบัญชีเดียวกับ Execute as ก่อน Deploy ใหม่. รายละเอียดเดิม: ' + message;
+  }
+  if (/setSharing|sharing|domain policy|Access denied/i.test(message)) {
+    return prefix + ': บัญชีที่ Deploy ไม่มีสิทธิ์ตั้งค่าไฟล์เป็น Anyone with the link หรือถูกนโยบาย Google Workspace บล็อก: ' + message;
+  }
+  return prefix + ': ' + message;
 }
 
 // ส่งสำเนารูปจากโฟลเดอร์สำรองกลับไปยังหน้าแอดมินแบบ data URL
