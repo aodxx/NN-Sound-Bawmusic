@@ -4,7 +4,7 @@
 ระบบจัดการการจองงานสำหรับวงดนตรีและทีมงานอีเวนต์ ใช้สำหรับจัดการงาน ลูกค้า อุปกรณ์ การชำระเงิน และการจองผ่าน LINE ในระบบเดียว
 
 > เอกสารนี้อ้างอิงโค้ดที่อยู่บนสาขา <code>main</code> หลัง Merge PR #33  
-> Main commit ปัจจุบัน: <code>63ebc7e</code>  
+> PR #33 ถูก Merge เข้า <code>main</code> ด้วย commit <code>63ebc7e</code>  
 > Frontend cache version: <code>3.4.2</code>  
 > Backend database schema version: <code>3.4.0</code>
 
