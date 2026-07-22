@@ -33,12 +33,39 @@ const BawmusicAPI = {
       const res = await fetch(url, options);
       const json = await res.json();
 
-      if (!json.success) throw new Error(json.error || 'API Error');
+      if (!json.success) {
+        const apiError = json.error || 'API Error';
+        if (BawmusicAPI.isSessionExpiredError(apiError)) BawmusicAPI.expireSession(apiError);
+        throw new Error(apiError);
+      }
       return json.data;
     } catch (err) {
       console.error(`API call failed [${action}]:`, err);
       throw err;
     }
+  },
+
+  isSessionExpiredError(message) {
+    return /เซสชันหมดอายุ|session.*expired|invalid session|session.*invalid/i.test(String(message || ''));
+  },
+
+  expireSession(message = 'เซสชันหมดอายุ กรุณาใส่รหัสเข้าใช้งานใหม่') {
+    BawmusicAPI.setSessionToken('');
+    const gate = document.getElementById('auth-gate');
+    const input = document.getElementById('access-code');
+    const error = document.getElementById('auth-error');
+    const status = document.getElementById('auth-status');
+    const submit = document.getElementById('access-submit');
+
+    if (gate) gate.classList.remove('hidden-init');
+    if (input) {
+      input.value = '';
+      setTimeout(() => input.focus(), 0);
+    }
+    if (error) error.textContent = message || 'เซสชันหมดอายุ กรุณาใส่รหัสเข้าใช้งานใหม่';
+    if (status) status.textContent = '';
+    if (submit) submit.disabled = false;
+    if (window.__app) window.__app.loading = false;
   },
 
   getSessionToken() {
@@ -73,7 +100,7 @@ const BawmusicAPI = {
     };
     document.getElementById('access-submit').onclick = submit;
     button.onkeydown = e => { if (e.key === 'Enter') submit(); };
-    return true;
+    return false;
   },
 
   // Dashboard
