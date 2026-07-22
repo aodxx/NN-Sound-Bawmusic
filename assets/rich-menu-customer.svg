@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="2500" height="1686" viewBox="0 0 2500 1686" role="img" aria-labelledby="title desc">
+  <title id="title">Bawmusic Customer Rich Menu</title>
+  <desc id="desc">Rich Menu สามช่องสำหรับจองงานใหม่ ประวัติของฉัน และตารางงาน</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#08080d"/>
+      <stop offset="1" stop-color="#1e1e30"/>
+    </linearGradient>
+    <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22d3ee"/>
+      <stop offset="1" stop-color="#67e8f9"/>
+    </linearGradient>
+    <linearGradient id="pink" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f637ec"/>
+      <stop offset="1" stop-color="#a21caf"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="22" stdDeviation="22" flood-color="#000000" flood-opacity=".34"/>
+    </filter>
+  </defs>
+
+  <rect width="2500" height="1686" rx="64" fill="url(#bg)"/>
+  <circle cx="180" cy="80" r="470" fill="#f637ec" opacity=".10"/>
+  <circle cx="2360" cy="1600" r="520" fill="#22d3ee" opacity=".10"/>
+
+  <text x="1250" y="150" text-anchor="middle" fill="#22d3ee" font-family="Arial, sans-serif" font-size="74" font-weight="700" letter-spacing="8">BAWMUSIC</text>
+  <text x="1250" y="225" text-anchor="middle" fill="#a1a1b5" font-family="Arial, sans-serif" font-size="35">CUSTOMER PORTAL</text>
+
+  <g filter="url(#shadow)">
+    <rect x="80" y="320" width="744" height="1170" rx="52" fill="#13131f" stroke="#22d3ee" stroke-opacity=".38" stroke-width="5"/>
+    <rect x="878" y="320" width="744" height="1170" rx="52" fill="#13131f" stroke="#f637ec" stroke-opacity=".38" stroke-width="5"/>
+    <rect x="1676" y="320" width="744" height="1170" rx="52" fill="#13131f" stroke="#22d3ee" stroke-opacity=".38" stroke-width="5"/>
+  </g>
+
+  <g transform="translate(452 565)" fill="none" stroke="url(#cyan)" stroke-width="28" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="-105" y="-120" width="210" height="220" rx="25"/>
+    <path d="M-55 -175v75M55 -175v75M-105 -45h210"/>
+    <path d="M-55 15h35M10 15h35M-55 70h35"/>
+  </g>
+  <g transform="translate(1250 565)" fill="none" stroke="url(#pink)" stroke-width="28" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="0" cy="0" r="120"/>
+    <path d="M0 -65v75l55 35"/>
+    <path d="M-75 -140l-58 40M75 -140l58 40"/>
+  </g>
+  <g transform="translate(2048 565)" fill="none" stroke="url(#cyan)" stroke-width="28" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="-115" y="-115" width="230" height="230" rx="25"/>
+    <path d="M-35 -115v230M35 -115v230M-115 -35h230M-115 35h230"/>
+  </g>
+
+  <text x="452" y="920" text-anchor="middle" fill="#f8fafc" font-family="Arial, sans-serif" font-size="54" font-weight="700">BOOK NOW</text>
+  <text x="452" y="1000" text-anchor="middle" fill="#a1a1b5" font-family="Arial, sans-serif" font-size="34">จองงานใหม่</text>
+  <text x="1250" y="920" text-anchor="middle" fill="#f8fafc" font-family="Arial, sans-serif" font-size="54" font-weight="700">MY HISTORY</text>
+  <text x="1250" y="1000" text-anchor="middle" fill="#a1a1b5" font-family="Arial, sans-serif" font-size="34">ประวัติของฉัน</text>
+  <text x="2048" y="920" text-anchor="middle" fill="#f8fafc" font-family="Arial, sans-serif" font-size="54" font-weight="700">SCHEDULE</text>
+  <text x="2048" y="1000" text-anchor="middle" fill="#a1a1b5" font-family="Arial, sans-serif" font-size="34">ตารางงาน</text>
+
+  <rect x="220" y="1260" width="464" height="8" rx="4" fill="url(#cyan)"/>
+  <rect x="1018" y="1260" width="464" height="8" rx="4" fill="url(#pink)"/>
+  <rect x="1816" y="1260" width="464" height="8" rx="4" fill="url(#cyan)"/>
+  <text x="1250" y="1585" text-anchor="middle" fill="#73738b" font-family="Arial, sans-serif" font-size="28" letter-spacing="3">NN' SOUND MUSIC</text>
+</svg>
