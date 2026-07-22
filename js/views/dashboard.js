@@ -178,7 +178,7 @@ function emptyState(title, detail, icon = 'fa-inbox') {
 function errorState(err) {
   return `
     <div class="dashboard-empty-state dashboard-error-state">
-      <span><i class="fa-solid fa-triangle-exclamation"></i></span><div><strong>โหลดข้อมูลไม่สำเร็จ</strong><p>${err.message || err}</p></div>
+      <span><i class="fa-solid fa-triangle-exclamation"></i></span><div><strong>โหลดข้อมูลไม่สำเร็จ</strong><p>${err.message || err}</p><button onclick="window.__app && window.__app.renderCurrentView()" class="mt-3 rounded-xl bg-gold/15 px-3 py-2 text-sm font-medium text-gold">ลองใหม่</button></div>
     </div>
   `;
 }
