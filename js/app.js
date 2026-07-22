@@ -6,6 +6,10 @@ function app() {
   return {
     currentView: 'dashboard',
     loading: true,
+    loadingMessage: 'กำลังเริ่มต้นระบบ...',
+    loadingDetail: '',
+    loadingTimedOut: false,
+    loadingTimer: null,
     darkMode: document.documentElement.getAttribute('data-theme') !== 'light',
     settings: {},
     showInstallBanner: false,
@@ -32,9 +36,35 @@ function app() {
     async init() {
       window.__app = this;
       this.loading = true;
+      this.loadingMessage = 'กำลังตรวจสอบการเข้าสู่ระบบ...';
+      this.loadingDetail = '';
+      this.loadingTimedOut = false;
       this.env = Utils.detectEnvironment();
 
-      const authenticated = await BawmusicAPI.requireAuth();
+      this.loadingTimer = setTimeout(() => {
+        if (!this.loading) return;
+        this.loadingTimedOut = true;
+        this.loadingMessage = 'ระบบกำลังตอบกลับช้ากว่าปกติ';
+        this.loadingDetail = 'ถ้าเกิน 15 วินาที ให้กด “ลองโหลดใหม่”';
+      }, 5000);
+
+      let authenticated;
+      try {
+        authenticated = await Promise.race([
+          BawmusicAPI.requireAuth(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('ตรวจสอบ session ใช้เวลานานเกินไป')), 15000))
+        ]);
+      } catch (e) {
+        console.error('App initialization failed:', e);
+        this.loadingTimedOut = true;
+        this.loadingMessage = 'โหลดระบบไม่สำเร็จ';
+        this.loadingDetail = e?.message || 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้';
+        return;
+      } finally {
+        if (this.loadingTimer) clearTimeout(this.loadingTimer);
+        this.loadingTimer = null;
+      }
+
       if (!authenticated) {
         this.loading = false;
         return;
@@ -75,6 +105,10 @@ function app() {
           if (!BawmusicAPI.getSessionToken()) return;
           console.warn('Could not load settings — check API_URL in js/api.js', e);
         });
+    },
+
+    retryLoading() {
+      window.location.reload();
     },
 
     isStandalone() {

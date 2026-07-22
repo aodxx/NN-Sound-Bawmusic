@@ -95,12 +95,22 @@
 <!-- ===== MAIN CONTENT ===== -->
 <main class="px-4 py-4 max-w-2xl mx-auto">
 
-  <!-- Loading Skeleton -->
+  <!-- Loading State -->
   <template x-if="loading">
-    <div class="space-y-3 animate-pulse">
-      <div class="h-24 bg-navy-light rounded-2xl"></div>
-      <div class="h-24 bg-navy-light rounded-2xl"></div>
-      <div class="h-24 bg-navy-light rounded-2xl"></div>
+    <div class="space-y-4">
+      <div class="rounded-2xl border border-gold/10 bg-navy-light/80 p-5 text-center shadow-sm">
+        <div class="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-gold/20 border-t-gold"></div>
+        <p class="mt-3 text-base font-medium text-gold" x-text="loadingMessage"></p>
+        <p x-show="loadingTimedOut" x-text="loadingDetail" class="mt-1 text-sm text-gray-500"></p>
+        <button x-show="loadingTimedOut" @click="retryLoading()" class="mt-4 rounded-xl bg-gold/15 px-4 py-2 text-sm font-medium text-gold">
+          ลองโหลดใหม่
+        </button>
+      </div>
+      <div class="space-y-3 animate-pulse" aria-hidden="true">
+        <div class="h-24 bg-navy-light rounded-2xl"></div>
+        <div class="h-24 bg-navy-light rounded-2xl"></div>
+        <div class="h-24 bg-navy-light rounded-2xl"></div>
+      </div>
     </div>
   </template>
 
@@ -172,8 +182,8 @@
 <!-- Toast container handled by SweetAlert2 -->
 
 <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-<script src="js/api.js?v=3.4.0"></script>
-<script src="js/utils.js?v=3.4.0"></script>
+<script src="js/api.js?v=3.4.1"></script>
+<script src="js/utils.js?v=3.4.1"></script>
 <script>
   // ดักจับ error ที่ไม่ถูกจัดการทั้งหมด แสดงผลให้เห็นแทนหน้าจอขาวเงียบๆ
   window.addEventListener('error', function (e) {
@@ -198,12 +208,12 @@
 <script src="js/views/settings.js"></script>
 <script src="js/views/bookingForm.js?v=3.3.0"></script>
 <script src="js/views/jobSummary.js"></script>
-<script src="js/app.js?v=3.4.0"></script>
+<script src="js/app.js?v=3.4.1"></script>
 
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {
-      navigator.serviceWorker.register('service-worker.js?v=3.4.0').catch(function (e) { console.warn('SW registration failed', e); });
+      navigator.serviceWorker.register('service-worker.js?v=3.4.1').catch(function (e) { console.warn('SW registration failed', e); });
     });
   }
 </script>

@@ -38,8 +38,9 @@ const Utils = {
   // ---------- Loading state helpers (แก้ปัญหาจอขาวตอนสลับหน้า) ----------
   skeletonLoader(rows = 3) {
     return `
-      <div class="flex flex-col items-center justify-center py-6">
-        <div class="bawmusic-spinner"></div>
+      <div class="flex flex-col items-center justify-center py-6 text-center">
+        <div class="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-gold/20 border-t-gold"></div>
+        <p class="mt-3 text-sm font-medium text-gold">กำลังโหลดข้อมูล...</p>
       </div>
       <div class="space-y-3 animate-pulse">
         ${Array.from({ length: rows }).map(() => '<div class="h-20 bg-navy-light rounded-2xl"></div>').join('')}
