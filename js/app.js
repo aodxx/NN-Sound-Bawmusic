@@ -62,17 +62,19 @@ function app() {
         this.showInstallBanner = true;
       }
 
-      try {
-        this.settings = await BawmusicAPI.getSettings();
-      } catch (e) {
-        if (!BawmusicAPI.getSessionToken()) {
-          this.loading = false;
-          return;
-        }
-        console.warn('Could not load settings — check API_URL in js/api.js', e);
-      }
+      // แสดงหน้าหลักทันที ไม่รอ getSettings เพราะถ้า Sheets/Apps Script ช้าจะทำให้ทั้งแอปเหมือนหน้าขาว
       this.loading = false;
       this.renderCurrentView();
+
+      // โหลดชื่อวง/ธีม/แบนเนอร์แบบเบื้องหลัง เมื่อได้ข้อมูลแล้ว Alpine จะอัปเดตหัวหน้าให้เอง
+      BawmusicAPI.getSettings()
+        .then((settings) => {
+          this.settings = settings || {};
+        })
+        .catch((e) => {
+          if (!BawmusicAPI.getSessionToken()) return;
+          console.warn('Could not load settings — check API_URL in js/api.js', e);
+        });
     },
 
     isStandalone() {
