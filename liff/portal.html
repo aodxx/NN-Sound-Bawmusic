@@ -95,6 +95,8 @@
       background: rgba(30,30,48,.78);
     }
     .icon-button:active { transform: scale(.95); }
+    .icon-button.loading { color: var(--cyan); }
+    .icon-button.loading i { animation: spin .8s linear infinite; }
 
     .profile-card {
       display: flex;
@@ -460,7 +462,7 @@
       <div>
         <p>สวัสดีครับ/ค่ะ</p>
         <h2 id="profile-name">ลูกค้า Bawmusic</h2>
-        <p id="profile-status">กำลังยืนยันบัญชี LINE...</p>
+        <p id="profile-status" aria-live="polite">กำลังยืนยันบัญชี LINE...</p>
       </div>
     </section>
 
@@ -483,7 +485,7 @@
           <span id="booking-count" class="count-badge">กำลังโหลด</span>
         </div>
         <div id="history-alert" class="notice hidden"></div>
-        <div id="history-state" class="state">
+        <div id="history-state" class="state" aria-live="polite">
           <div>
             <div class="spinner" style="margin:0 auto 12px"></div>
             <p>กำลังโหลดประวัติการจอง...</p>
@@ -510,7 +512,7 @@
           </button>
         </div>
 
-        <div id="schedule-state" class="state hidden">
+        <div id="schedule-state" class="state hidden" aria-live="polite">
           <div>
             <div class="spinner" style="margin:0 auto 12px"></div>
             <p>กำลังโหลดตารางงาน...</p>
@@ -554,7 +556,8 @@
       tab: 'history',
       month: monthKey(new Date()),
       history: null,
-      schedule: {}
+      schedule: {},
+      activeLoads: 0
     };
 
     var JOB_LABELS = {
@@ -616,6 +619,50 @@
       });
     }
 
+    // Google Sheets อาจส่งเวลาออกมาเป็น ISO Date ปี 1899 จึงต้องแปลงเป็นเวลาไทยก่อนแสดงผล
+    function formatTime(value) {
+      if (value == null || value === '') return '';
+
+      if (typeof value === 'number' && isFinite(value)) {
+        var fraction = value - Math.floor(value);
+        var totalMinutes = Math.round(fraction * 24 * 60) % (24 * 60);
+        var hours = Math.floor(totalMinutes / 60);
+        var minutes = totalMinutes % 60;
+        return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0');
+      }
+
+      var text = String(value).trim();
+      if (!text) return '';
+
+      var clock = text.match(/^(\\d{1,2}):(\\d{2})(?::\\d{2})?$/);
+      if (clock) {
+        return String(Math.min(23, Number(clock[1]))).padStart(2, '0') + ':' + clock[2];
+      }
+
+      var parsed = new Date(text);
+      if (isNaN(parsed.getTime())) return '';
+
+      try {
+        var formatted = new Intl.DateTimeFormat('th-TH', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+          timeZone: 'Asia/Bangkok'
+        }).format(parsed);
+        return formatted.replace(/^24:/, '00:');
+      } catch (ignore) {
+        return String(parsed.getHours()).padStart(2, '0') + ':' + String(parsed.getMinutes()).padStart(2, '0');
+      }
+    }
+
+    function formatTimeRange(startValue, endValue) {
+      var start = formatTime(startValue);
+      var end = formatTime(endValue);
+      if (!start && !end) return 'รอระบุเวลา';
+      if (start && end) return start + ' - ' + end + ' น.';
+      return (start || end) + ' น.';
+    }
+
     function formatMonthThai(value) {
       var parts = String(value).split('-').map(Number);
       if (parts.length !== 2 || !parts[0] || !parts[1]) return value;
@@ -626,8 +673,9 @@
     }
 
     function formatMoney(value) {
-      var amount = Number(value);
-      if (!isFinite(amount) || amount <= 0) return '-';
+      if (value == null || String(value).trim() === '') return '-';
+      var amount = Number(String(value).replace(/,/g, ''));
+      if (!isFinite(amount)) return '-';
       return amount.toLocaleString('th-TH') + ' บาท';
     }
 
@@ -671,6 +719,24 @@
       byId('boot-screen').classList.add('hidden');
       byId('error-screen').classList.add('hidden');
       byId('app').classList.remove('hidden');
+    }
+
+    function updateRefreshButton() {
+      var button = byId('refresh-button');
+      var loading = state.activeLoads > 0;
+      button.classList.toggle('loading', loading);
+      button.disabled = loading;
+      button.setAttribute('aria-busy', loading ? 'true' : 'false');
+    }
+
+    function beginLoad() {
+      state.activeLoads += 1;
+      updateRefreshButton();
+    }
+
+    function endLoad() {
+      state.activeLoads = Math.max(0, state.activeLoads - 1);
+      updateRefreshButton();
     }
 
     async function fetchWithTimeout(url, options, timeoutMs) {
@@ -774,7 +840,7 @@
         '</div>';
       }
 
-      var time = [booking.startTime, booking.endTime].filter(Boolean).join(' - ') || 'รอระบุเวลา';
+      var time = formatTimeRange(booking.startTime, booking.endTime);
       var venue = booking.venue || 'รอระบุสถานที่';
       var packageText = booking.package ? '<div class="detail-row"><i class="fa-solid fa-layer-group"></i><span>แพ็กเกจ: <strong>' + escapeHtml(booking.package) + '</strong></span></div>' : '';
 
@@ -795,6 +861,7 @@
     }
 
     async function loadHistory() {
+      beginLoad();
       setHistoryState('loading');
       byId('booking-count').textContent = 'กำลังโหลด';
       byId('history-alert').classList.add('hidden');
@@ -822,6 +889,8 @@
       } catch (error) {
         byId('profile-status').textContent = 'เชื่อมต่อแล้ว แต่โหลดประวัติไม่สำเร็จ';
         setHistoryState('error', 'โหลดประวัติไม่สำเร็จ', error.message || 'ตรวจสอบการเชื่อมต่อแล้วลองใหม่');
+      } finally {
+        endLoad();
       }
     }
 
@@ -880,6 +949,7 @@
     }
 
     async function loadSchedule() {
+      beginLoad();
       setScheduleState('loading');
       try {
         var data = await callApi('listPublicSchedule', { month: state.month }, 'GET');
@@ -888,6 +958,8 @@
         setScheduleState('ready');
       } catch (error) {
         setScheduleState('error', 'โหลดตารางงานไม่สำเร็จ', error.message || 'ตรวจสอบการเชื่อมต่อแล้วลองใหม่');
+      } finally {
+        endLoad();
       }
     }
 
@@ -954,6 +1026,7 @@
       }
 
       showApp();
+      byId('profile-status').textContent = 'ยืนยันบัญชี LINE แล้ว กำลังโหลดข้อมูล...';
       setBootText('พร้อมใช้งาน');
       var queryTab = new URLSearchParams(window.location.search).get('tab');
       setTab(queryTab === 'schedule' ? 'schedule' : 'history');
