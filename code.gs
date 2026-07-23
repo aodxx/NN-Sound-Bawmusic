@@ -373,9 +373,28 @@ function sheetToObjectsByKey(sheet, keyField) {
 // แปลงเป็นรูปแบบที่ API และหน้าเว็บใช้ร่วมกันได้ตั้งแต่ต้นทาง
 function normalizeApiDate(fieldName, value) {
   if (!(value instanceof Date) || isNaN(value.getTime())) return value;
+
   var dateFields = ['date', 'createdAt', 'updatedAt', 'paymentDate', 'timestamp', 'lastActiveAt', 'profileDriveUpdatedAt', 'imageUpdatedAt'];
-  if (dateFields.indexOf(fieldName) === -1) return value;
+  var timeFields = ['startTime', 'endTime'];
+  if (dateFields.indexOf(fieldName) === -1 && timeFields.indexOf(fieldName) === -1) return value;
+
   var timezone = Session.getScriptTimeZone() || 'Asia/Bangkok';
+
+  // TIME cells are Date objects based on the spreadsheet timezone. Use that
+  // timezone so a value such as 03:45 is not shifted when it becomes JSON.
+  if (timeFields.indexOf(fieldName) !== -1) {
+    try {
+      var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+      if (spreadsheet && spreadsheet.getSpreadsheetTimeZone()) {
+        timezone = spreadsheet.getSpreadsheetTimeZone();
+      }
+    } catch (ignore) {
+      // Fall back to the Apps Script timezone when the spreadsheet timezone
+      // cannot be read in a non-spreadsheet execution context.
+    }
+    return Utilities.formatDate(value, timezone, 'HH:mm');
+  }
+
   if (fieldName === 'date') {
     return Utilities.formatDate(value, timezone, 'yyyy-MM-dd');
   }
