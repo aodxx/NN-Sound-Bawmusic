@@ -1404,6 +1404,7 @@ function listAuditLog(params) {
 function submitLiffBooking(idToken, data) {
   if (!data || !data.date) throw new Error('กรุณาระบุวันที่จัดงาน');
 
+  var schedule = normalizeLiffBookingSchedule_(data.date, data.startTime, data.endTime);
   var profile = prepareLineProfile_(verifyLineIdToken(idToken)); // throws ถ้า token ไม่ถูกต้อง
   upsertMember(profile);
 
@@ -1433,25 +1434,46 @@ function submitLiffBooking(idToken, data) {
     customerId = created.id;
   }
 
-  var booking = createBooking({
-    customerId: customerId,
-    customerName: customerName || 'ลูกค้า LINE',
-    phone: data.phone || '',
-    line: profile.displayName || '',
-    venue: data.venue || '',
-    mapLink: data.mapLink || '',
-    province: data.province || '',
-    date: data.date,
-    startTime: data.startTime || '',
-    endTime: data.endTime || '',
-    jobType: data.jobType || 'Custom',
-    package: '',
-    price: 0,
-    deposit: 0,
-    remarks: data.remarks || '',
-    equipment: [],
-    status: 'pending' // งานที่ลูกค้าจองเองผ่าน LIFF ต้องรอแอดมินยืนยันและแจ้งราคา
-  }, profile.lineUserId);
+  // ตรวจซ้ำภายใต้ Script Lock: คำขอที่เข้าพร้อมกันจะถูกตรวจทีละรายการ
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) {
+    throw new Error('ระบบกำลังตรวจคำขอจองหลายรายการพร้อมกัน กรุณาลองใหม่อีกครั้ง');
+  }
+
+  var booking;
+  try {
+    var conflict = checkConflicts({
+      date: schedule.date,
+      startTime: schedule.startTime,
+      endTime: schedule.endTime,
+      equipment: []
+    });
+    if (conflict.hasConflict) {
+      throw new Error(buildLiffConflictMessage_(conflict));
+    }
+
+    booking = createBooking({
+      customerId: customerId,
+      customerName: customerName || 'ลูกค้า LINE',
+      phone: data.phone || '',
+      line: profile.displayName || '',
+      venue: data.venue || '',
+      mapLink: data.mapLink || '',
+      province: data.province || '',
+      date: schedule.date,
+      startTime: schedule.startTime,
+      endTime: schedule.endTime,
+      jobType: data.jobType || 'Custom',
+      package: '',
+      price: 0,
+      deposit: 0,
+      remarks: data.remarks || '',
+      equipment: [],
+      status: 'pending' // งานที่ลูกค้าจองเองผ่าน LIFF ต้องรอแอดมินยืนยันและแจ้งราคา
+    }, profile.lineUserId);
+  } finally {
+    lock.releaseLock();
+  }
 
   return { id: booking.id, bookingToken: booking.bookingToken, memberId: profile.lineUserId };
 }
