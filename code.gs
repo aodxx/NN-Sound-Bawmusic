@@ -40,7 +40,7 @@ var DRIVE_DEFAULT_FOLDER_IDS = {
 
 // Action ที่เปิดให้เรียกได้โดยไม่ต้องมี session ของแอป (ใช้จากหน้า LIFF ของลูกค้า)
 // การเรียกใช้งานระบบแอดมินต้องส่ง sessionToken ที่ออกโดย createSession
-var PUBLIC_ACTIONS = ['createSession', 'submitLiffBooking', 'verifyAndUpsertMember', 'verifyLineToken', 'getBookingByToken', 'listPublicEquipment', 'getMyBookings', 'listPublicSchedule'];
+var PUBLIC_ACTIONS = ['createSession', 'submitLiffBooking', 'checkLiffAvailability', 'verifyAndUpsertMember', 'verifyLineToken', 'getBookingByToken', 'listPublicEquipment', 'getMyBookings', 'listPublicSchedule'];
 
 // ---------- ENTRY POINTS ----------
 
@@ -82,6 +82,7 @@ function handleRequest(e, method) {
       case 'getBookingByToken': result = getBookingByToken(params.token); break;
       case 'getMyBookings': result = getMyBookings(params.idToken, params); break;
       case 'listPublicSchedule': result = listPublicSchedule(params.month); break;
+      case 'checkLiffAvailability': result = checkLiffAvailability(params.date, params.startTime, params.endTime); break;
 
       // Customers
       case 'listCustomers': result = listCustomers(params); break;
