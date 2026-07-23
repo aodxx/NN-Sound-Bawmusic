@@ -255,7 +255,28 @@ window.__setBookingFilter = (key, value) => {
   paintBookingsListView();
 };
 
+function formatBookingTime(value) {
+  if (value == null || value === '') return '';
+
+  const match = String(value).trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (!match) return '';
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return '';
+  return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0');
+}
+
+function bookingTimeRangeText(booking) {
+  const start = formatBookingTime(booking.startTime);
+  const end = formatBookingTime(booking.endTime);
+  if (!start && !end) return '';
+  if (start && end) return start + ' - ' + end;
+  return start || end;
+}
+
 function bookingRow(b) {
+  const timeText = bookingTimeRangeText(b);
   return `
     <div class="bg-navy-light rounded-2xl p-3.5 border ${b.status === 'pending' ? 'border-rose-400/40 pending-booking-row' : 'border-gold/10'} shadow-sm shadow-black/5 active:scale-[0.98] transition-transform cursor-pointer"
          onclick="window.openBookingForm('${b.id}')">
@@ -268,6 +289,7 @@ function bookingRow(b) {
       </div>
       ${b.status === 'pending' ? '<p class="pending-booking-label mb-1"><i class="fa-solid fa-bell mr-1"></i>คำขอใหม่ · รอแอดมินยืนยัน</p>' : ''}
       <p class="text-base text-gray-400 mb-1"><i class="fa-solid fa-location-dot mr-1 w-3"></i>${b.venue || 'ไม่ระบุสถานที่'} ${b.province ? '· ' + b.province : ''}</p>
+      ${timeText ? '<p class="text-base text-gray-400 mb-1"><i class="fa-regular fa-clock mr-1 w-3"></i>' + timeText + ' น.</p>' : ''}
       <div class="flex items-center justify-between mt-2 text-base">
         <span class="text-gray-400"><i class="fa-regular fa-calendar mr-1 w-3"></i>${Utils.formatDate(b.date)}</span>
         <span class="text-gold font-medium">${Utils.formatMoney(b.price)}</span>

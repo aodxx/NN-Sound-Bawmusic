@@ -234,11 +234,25 @@ function paymentManagerSection(s) {
     '<p class="text-xs text-gray-500 mt-2"><i class="fa-solid fa-circle-info mr-1"></i>ยอดในส่วนนี้คำนวณจากแท็บ Payments อัตโนมัติ</p></section>';
 }
 
+function normalizeTimeInputValue(value) {
+  if (value == null || value === '') return '';
+
+  const text = String(value).trim();
+  const match = text.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (!match) return '';
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return '';
+  return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0');
+}
+
 function formInput(field, label, value, type) {
+  const inputValue = type === 'time' ? normalizeTimeInputValue(value) : (value || '');
   return `
     <div>
       <label class="text-base text-gray-500 block mb-1">${label}</label>
-      <input id="field-${field}" type="${type}" value="${value || ''}" oninput="updateField('${field}', this.value)"
+      <input id="field-${field}" type="${type}" value="${inputValue}" oninput="updateField('${field}', this.value)"
         class="w-full bg-navy border border-gold/10 rounded-lg px-3 py-3 text-base text-gray-100 focus:outline-none focus:border-gold/40">
     </div>
   `;
