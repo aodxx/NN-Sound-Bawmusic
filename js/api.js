@@ -204,7 +204,11 @@ const BawmusicAPI = {
 
   // Payments
   listPayments: (bookingId) => BawmusicAPI.call('listPayments', { bookingId }, true),
+  getPayment: (id) => BawmusicAPI.call('getPayment', { id }, true),
+  getPaymentSummary: (bookingId) => BawmusicAPI.call('getPaymentSummary', { bookingId }, true),
   createPayment: (data) => BawmusicAPI.call('createPayment', { data }, true),
+  updatePayment: (id, data) => BawmusicAPI.call('updatePayment', { id, data }, true),
+  deletePayment: (id) => BawmusicAPI.call('deletePayment', { id }, true),
 
   // Analytics
   getAnalytics: (params = {}) => BawmusicAPI.call('getAnalytics', params, true)

@@ -24,9 +24,9 @@ var SHEET_NAMES = {
 
 var MEMBERS_HEADERS = ['lineUserId', 'displayName', 'pictureUrl', 'isFriend', 'isBlocked', 'marketingConsent', 'lastActiveAt', 'createdAt', 'profileDriveFileId', 'profileDriveUpdatedAt'];
 var EQUIPMENT_HEADERS = ['id', 'name', 'category', 'availableQty', 'unit', 'remarks', 'imageFileId', 'imageUrl', 'imageName', 'imageUpdatedAt'];
-var PAYMENTS_HEADERS = ['id', 'bookingId', 'amount', 'type', 'paymentDate', 'evidenceUrl', 'notes', 'createdAt'];
+var PAYMENTS_HEADERS = ['id', 'bookingId', 'amount', 'type', 'paymentDate', 'evidenceUrl', 'notes', 'createdAt', 'method'];
 var AUDIT_LOG_HEADERS = ['id', 'actorId', 'action', 'entity', 'beforeData', 'afterData', 'timestamp'];
-var DB_SCHEMA_VERSION = '3.4.0';
+var DB_SCHEMA_VERSION = '3.5.0';
 var DRIVE_WRITE_SCOPE = 'https://www.googleapis.com/auth/drive';
 
 // โฟลเดอร์ที่สร้างไว้ใน Google Drive ของ Bawmusic
@@ -120,6 +120,7 @@ function handleRequest(e, method) {
 
       // Payments
       case 'listPayments': result = listPayments(params); break;
+      case 'getPaymentSummary': result = getPaymentSummary(params.bookingId); break;
       case 'getPayment': result = getPayment(params.id); break;
       case 'createPayment': result = createPayment(params.data, params.actorId); break;
       case 'updatePayment': result = updatePayment(params.id, params.data, params.actorId); break;
@@ -254,6 +255,11 @@ function migrateSchemaIfNeeded(ss) {
   var membersSheet = ss.getSheetByName(SHEET_NAMES.MEMBERS);
   if (membersSheet) {
     MEMBERS_HEADERS.slice(8).forEach(function (header) { addColumnIfMissing(membersSheet, header); });
+  }
+
+  var paymentsSheet = ss.getSheetByName(SHEET_NAMES.PAYMENTS);
+  if (paymentsSheet) {
+    PAYMENTS_HEADERS.slice(8).forEach(function (header) { addColumnIfMissing(paymentsSheet, header); });
   }
 }
 
@@ -782,13 +788,21 @@ function buildLiffConflictMessage_(conflict) {
   return 'ข้อมูลการจองนี้ชนกับงานเดิม กรุณาตรวจสอบวันที่และเวลาอีกครั้ง';
 }
 function createBooking(data, actorId) {
+  if (!data) throw new Error('ข้อมูลการจองไม่ครบ');
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAMES.BOOKINGS);
   var id = genId();
   var price = Number(data.price) || 0;
-  var deposit = Number(data.deposit) || 0;
-  var remaining = price - deposit;
+  var initialDeposit = Number(data.deposit) || 0;
+  if (!isFinite(price) || price < 0) throw new Error('ราคางานไม่ถูกต้อง');
+  if (!isFinite(initialDeposit) || initialDeposit < 0) throw new Error('ยอดชำระเริ่มต้นไม่ถูกต้อง');
+  if (initialDeposit > 0 && price <= 0) throw new Error('กรุณาระบุราคางานก่อนบันทึกยอดชำระเริ่มต้น');
+  if (price > 0 && initialDeposit > price + 0.01) throw new Error('ยอดชำระเริ่มต้นต้องไม่เกินราคางาน');
   var token = genToken();
 
+  // เขียนยอดเริ่มต้นเป็น 0 ก่อน แล้วให้ createPayment สร้างรายการ Payments
+  // เพื่อให้ Payments เป็นแหล่งข้อมูลการเงินหลักตั้งแต่เริ่มสร้างงาน
+  var deposit = 0;
+  var remaining = price;
   sheet.appendRow([
     id, data.customerId || '', data.customerName || '', data.phone || '', data.line || '',
     data.venue || '', data.mapLink || '', data.province || '', data.date, data.startTime || '',
@@ -797,6 +811,16 @@ function createBooking(data, actorId) {
     new Date(), new Date(), token
   ]);
   logAudit(actorId, 'create_booking', 'Booking:' + id, null, data);
+
+  if (initialDeposit > 0) {
+    createPayment({
+      bookingId: id,
+      amount: initialDeposit,
+      type: 'deposit',
+      paymentDate: new Date(),
+      notes: 'ยอดชำระเริ่มต้นจากการสร้างการจอง'
+    }, actorId || 'admin');
+  }
   return { id: id, bookingToken: token };
 }
 
@@ -805,13 +829,29 @@ function updateBooking(id, data, actorId) {
   var rowIdx = findRowIndexById(sheet, id);
   if (rowIdx === -1) throw new Error('Booking not found');
 
+  data = data || {};
   var before = getBooking(id);
+  var paymentRecalc = data._paymentRecalc === true;
+  var existingPayments = listPayments({ bookingId: id });
+
+  // ยอดชำระของงานที่มี Payments แล้วต้องแก้ผ่าน create/update/deletePayment เท่านั้น
+  if (data.deposit !== undefined && !paymentRecalc) {
+    var requestedDeposit = Number(data.deposit) || 0;
+    if (!isFinite(requestedDeposit) || requestedDeposit < 0) throw new Error('ยอดชำระไม่ถูกต้อง');
+    if (Math.abs(requestedDeposit - (Number(before.deposit) || 0)) > 0.01) {
+      throw new Error('ยอดชำระต้องแก้ผ่านรายการ Payments เพื่อป้องกันยอดการเงินไม่ตรงกัน');
+    }
+    delete data.deposit;
+  }
+
   if (data.equipment) data.equipment = JSON.stringify(data.equipment);
-  if (data.price !== undefined || data.deposit !== undefined) {
-    var current = getBooking(id);
-    var price = data.price !== undefined ? Number(data.price) : Number(current.price);
-    var deposit = data.deposit !== undefined ? Number(data.deposit) : Number(current.deposit);
-    data.remaining = price - deposit;
+  if (data.price !== undefined || paymentRecalc) {
+    var price = data.price !== undefined ? Number(data.price) : Number(before.price) || 0;
+    if (!isFinite(price) || price < 0) throw new Error('ราคางานไม่ถูกต้อง');
+    var paid = paymentRecalc
+      ? Number(data.deposit) || 0
+      : (existingPayments.length ? paymentTotal_(existingPayments) : (Number(before.deposit) || 0));
+    data.remaining = Math.max(0, price - paid);
   }
   data.updatedAt = new Date();
 
@@ -821,7 +861,11 @@ function updateBooking(id, data, actorId) {
       sheet.getRange(rowIdx, i + 1).setValue(data[h]);
     }
   });
-  logAudit(actorId, 'update_booking', 'Booking:' + id, before, data);
+  var auditData = {};
+  Object.keys(data).forEach(function (key) {
+    if (key !== '_paymentRecalc') auditData[key] = data[key];
+  });
+  logAudit(actorId, 'update_booking', 'Booking:' + id, before, auditData);
 
   // ส่งข้อความยืนยันอัตโนมัติเมื่อสถานะเปลี่ยนเป็น "ยืนยันแล้ว" (ไม่ทำให้การอัปเดตล้มเหลวแม้ส่งไม่สำเร็จ)
   if (data.status === 'confirmed' && before && before.status !== 'confirmed') {
@@ -835,6 +879,10 @@ function deleteBooking(id, actorId) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAMES.BOOKINGS);
   var rowIdx = findRowIndexById(sheet, id);
   if (rowIdx === -1) throw new Error('Booking not found');
+  var payments = listPayments({ bookingId: id });
+  if (payments.length) {
+    throw new Error('งานนี้มีรายการชำระเงินแล้ว ไม่สามารถลบได้ กรุณาเปลี่ยนสถานะเป็นยกเลิกแทน');
+  }
   var before = getBooking(id);
   sheet.deleteRow(rowIdx);
   logAudit(actorId, 'delete_booking', 'Booking:' + id, before, null);
@@ -1336,6 +1384,21 @@ function verifyAndUpsertMember(idToken) {
 
 // ---------- PAYMENTS ----------
 
+var PAYMENT_TYPE_LABELS_ = {
+  deposit: 'มัดจำ',
+  partial: 'ชำระบางส่วน',
+  final: 'ชำระเต็มจำนวน',
+  refund: 'คืนเงิน'
+};
+
+var PAYMENT_METHOD_KEYS_ = {
+  cash: true,
+  transfer: true,
+  promptpay: true,
+  card: true,
+  other: true
+};
+
 function listPayments(params) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAMES.PAYMENTS);
   var payments = sheetToObjects(sheet);
@@ -1351,97 +1414,222 @@ function getPayment(id) {
   return payments.find(function (p) { return p.id === id; }) || null;
 }
 
+function getPaymentSummary(bookingId) {
+  if (!bookingId) throw new Error('bookingId is required');
+  var booking = getBooking(bookingId);
+  if (!booking) throw new Error('ไม่พบ Booking ที่ระบุ (bookingId ไม่ถูกต้อง)');
+
+  var payments = listPayments({ bookingId: bookingId });
+  var totalPaid = paymentTotal_(payments);
+  // รองรับข้อมูลเก่าที่ยังมี deposit ใน Bookings แต่ยังไม่มีแถวใน Payments
+  if (!payments.length && Number(booking.deposit) > 0) totalPaid = Number(booking.deposit) || 0;
+  var price = Number(booking.price) || 0;
+  var remaining = Math.max(0, price - totalPaid);
+  var paymentStatus = totalPaid <= 0 ? 'unpaid' : (price > 0 && totalPaid >= price ? 'paid' : 'partial');
+
+  return {
+    bookingId: bookingId,
+    price: price,
+    totalPaid: totalPaid,
+    remaining: remaining,
+    paymentStatus: paymentStatus,
+    paymentStatusLabel: paymentStatus === 'paid' ? 'ชำระครบแล้ว' : (paymentStatus === 'partial' ? 'ชำระบางส่วน' : 'ยังไม่ชำระ'),
+    payments: payments
+  };
+}
+
+function paymentTotal_(payments) {
+  var total = (payments || []).reduce(function (sum, payment) {
+    var amount = Number(payment.amount) || 0;
+    return payment.type === 'refund' ? sum - amount : sum + amount;
+  }, 0);
+  return Math.round(total * 100) / 100;
+}
+
+function normalizePaymentType_(value) {
+  var type = String(value || 'deposit').trim().toLowerCase();
+  if (!PAYMENT_TYPE_LABELS_[type]) throw new Error('ประเภทการชำระเงินไม่ถูกต้อง');
+  return type;
+}
+
+function normalizePaymentMethod_(value) {
+  var method = String(value || '').trim().toLowerCase();
+  if (method && !PAYMENT_METHOD_KEYS_[method]) throw new Error('ช่องทางการชำระเงินไม่ถูกต้อง');
+  return method;
+}
+
+function normalizePaymentDate_(value) {
+  if (!value) return new Date();
+  var text = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    var parts = text.split('-').map(Number);
+    var dateOnly = new Date(parts[0], parts[1] - 1, parts[2]);
+    if (!isNaN(dateOnly.getTime())) return dateOnly;
+  }
+  var date = new Date(value);
+  if (isNaN(date.getTime())) throw new Error('วันที่ชำระเงินไม่ถูกต้อง');
+  return date;
+}
+
+function normalizePaymentAmount_(value) {
+  var amount = Number(value);
+  if (!isFinite(amount) || amount <= 0) throw new Error('จำนวนเงินต้องมากกว่า 0');
+  return Math.round(amount * 100) / 100;
+}
+
+function appendPaymentRecord_(sheet, data) {
+  var id = data.id || genId();
+  var values = {
+    id: id,
+    bookingId: data.bookingId,
+    amount: data.amount,
+    type: data.type,
+    paymentDate: data.paymentDate,
+    evidenceUrl: data.evidenceUrl || '',
+    notes: data.notes || '',
+    createdAt: data.createdAt || new Date(),
+    method: data.method || ''
+  };
+  var headers = getHeaders(sheet);
+  sheet.appendRow(headers.map(function (header) {
+    return Object.prototype.hasOwnProperty.call(values, header) ? values[header] : '';
+  }));
+  return id;
+}
+
+function validatePaymentAgainstBooking_(booking, existingPayments, amount, type) {
+  var currentTotal = paymentTotal_(existingPayments);
+  var price = Number(booking.price) || 0;
+  if (type === 'refund') {
+    if (amount > currentTotal + 0.01) throw new Error('ยอดคืนเงินต้องไม่เกินยอดที่ชำระแล้ว');
+  } else if (price > 0 && currentTotal + amount > price + 0.01) {
+    throw new Error('ยอดชำระรวมจะเกินราคางาน กรุณาตรวจสอบจำนวนเงิน');
+  }
+}
+
 function createPayment(data, actorId) {
   if (!data || !data.bookingId) throw new Error('bookingId is required');
 
-  var booking = getBooking(data.bookingId);
-  if (!booking) throw new Error('ไม่พบ Booking ที่ระบุ (bookingId ไม่ถูกต้อง)');
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('ระบบกำลังบันทึกการชำระเงินรายการอื่น กรุณาลองใหม่อีกครั้ง');
 
-  var amount = Number(data.amount);
-  if (!amount || amount <= 0) throw new Error('จำนวนเงินต้องมากกว่า 0');
+  try {
+    var booking = getBooking(data.bookingId);
+    if (!booking) throw new Error('ไม่พบ Booking ที่ระบุ (bookingId ไม่ถูกต้อง)');
 
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAMES.PAYMENTS);
+    var type = normalizePaymentType_(data.type);
+    var amount = normalizePaymentAmount_(data.amount);
+    var paymentDate = normalizePaymentDate_(data.paymentDate);
+    var method = normalizePaymentMethod_(data.method);
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAMES.PAYMENTS);
+    var existingPayments = listPayments({ bookingId: data.bookingId });
 
-  // ป้องกันยอดมัดจำเดิมหาย: ถ้านี่คือ payment แรกของ booking นี้ และมีมัดจำเดิมอยู่ก่อนแล้ว
-  // (จากตอนที่ยังไม่มีระบบ Payments) ให้สร้างรายการย้อนหลังแทนมัดจำเดิมก่อน แล้วค่อยเพิ่มรายการใหม่
-  var existingPayments = listPayments({ bookingId: data.bookingId });
-  if (existingPayments.length === 0 && Number(booking.deposit) > 0) {
-    var backfillId = genId();
-    sheet.appendRow([
-      backfillId, data.bookingId, Number(booking.deposit), 'deposit',
-      booking.createdAt || new Date(), '', 'ยอดมัดจำเดิมก่อนใช้ระบบ Payments (สร้างอัตโนมัติ)', new Date()
-    ]);
-    logAudit(actorId, 'backfill_payment', 'Payment:' + backfillId, null, { bookingId: data.bookingId, amount: booking.deposit });
+    // ป้องกันยอดมัดจำเดิมหายเมื่อเริ่มใช้ Payments กับข้อมูลเก่า
+    if (existingPayments.length === 0 && Number(booking.deposit) > 0) {
+      var legacyDeposit = normalizePaymentAmount_(booking.deposit);
+      var backfillId = appendPaymentRecord_(sheet, {
+        bookingId: data.bookingId,
+        amount: legacyDeposit,
+        type: 'deposit',
+        paymentDate: booking.createdAt || new Date(),
+        notes: 'ยอดมัดจำเดิมก่อนใช้ระบบ Payments (สร้างอัตโนมัติ)'
+      });
+      logAudit(actorId, 'backfill_payment', 'Payment:' + backfillId, null, { bookingId: data.bookingId, amount: legacyDeposit });
+      existingPayments = listPayments({ bookingId: data.bookingId });
+    }
+
+    validatePaymentAgainstBooking_(booking, existingPayments, amount, type);
+    var id = appendPaymentRecord_(sheet, {
+      bookingId: data.bookingId,
+      amount: amount,
+      type: type,
+      paymentDate: paymentDate,
+      method: method,
+      evidenceUrl: String(data.evidenceUrl || '').trim(),
+      notes: String(data.notes || '').trim()
+    });
+    logAudit(actorId, 'create_payment', 'Payment:' + id, null, data);
+
+    recalcBookingPayments(data.bookingId, actorId);
+    return { id: id, summary: getPaymentSummary(data.bookingId) };
+  } finally {
+    lock.releaseLock();
   }
-
-  var id = genId();
-  sheet.appendRow([
-    id, data.bookingId, amount, data.type || 'deposit',
-    data.paymentDate || new Date(), data.evidenceUrl || '', data.notes || '', new Date()
-  ]);
-  logAudit(actorId, 'create_payment', 'Payment:' + id, null, data);
-
-  recalcBookingPayments(data.bookingId, actorId);
-  return { id: id };
 }
 
 function updatePayment(id, data, actorId) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAMES.PAYMENTS);
-  var rowIdx = findRowIndexById(sheet, id);
-  if (rowIdx === -1) throw new Error('Payment not found');
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('ระบบกำลังแก้ไขการชำระเงินรายการอื่น กรุณาลองใหม่อีกครั้ง');
 
-  var before = getPayment(id);
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAMES.PAYMENTS);
+    var rowIdx = findRowIndexById(sheet, id);
+    if (rowIdx === -1) throw new Error('ไม่พบรายการชำระเงิน');
 
-  if (data.amount !== undefined) {
-    var amt = Number(data.amount);
-    if (!amt || amt <= 0) throw new Error('จำนวนเงินต้องมากกว่า 0');
+    var before = getPayment(id);
+    var targetBookingId = data && data.bookingId ? data.bookingId : before.bookingId;
+    var targetBooking = getBooking(targetBookingId);
+    if (!targetBooking) throw new Error('ไม่พบ Booking ปลายทางที่ระบุ');
+
+    var nextType = normalizePaymentType_(data && data.type !== undefined ? data.type : before.type);
+    var nextAmount = normalizePaymentAmount_(data && data.amount !== undefined ? data.amount : before.amount);
+    var nextDate = normalizePaymentDate_(data && data.paymentDate !== undefined ? data.paymentDate : before.paymentDate);
+    var nextMethod = normalizePaymentMethod_(data && data.method !== undefined ? data.method : before.method);
+    var targetPayments = listPayments({ bookingId: targetBookingId }).filter(function (payment) { return payment.id !== id; });
+    validatePaymentAgainstBooking_(targetBooking, targetPayments, nextAmount, nextType);
+
+    var updates = {
+      bookingId: targetBookingId,
+      amount: nextAmount,
+      type: nextType,
+      paymentDate: nextDate,
+      method: nextMethod,
+      evidenceUrl: data && data.evidenceUrl !== undefined ? String(data.evidenceUrl || '').trim() : (before.evidenceUrl || ''),
+      notes: data && data.notes !== undefined ? String(data.notes || '').trim() : (before.notes || '')
+    };
+    var headers = getHeaders(sheet);
+    headers.forEach(function (header, index) {
+      if (Object.prototype.hasOwnProperty.call(updates, header)) sheet.getRange(rowIdx, index + 1).setValue(updates[header]);
+    });
+    logAudit(actorId, 'update_payment', 'Payment:' + id, before, updates);
+
+    if (before.bookingId) recalcBookingPayments(before.bookingId, actorId);
+    if (targetBookingId !== before.bookingId) recalcBookingPayments(targetBookingId, actorId);
+    return { id: id, summary: getPaymentSummary(targetBookingId) };
+  } finally {
+    lock.releaseLock();
   }
-  if (data.bookingId && !getBooking(data.bookingId)) {
-    throw new Error('ไม่พบ Booking ปลายทางที่ระบุ (bookingId ไม่ถูกต้อง)');
-  }
-
-  var headers = getHeaders(sheet);
-  headers.forEach(function (h, i) {
-    if (data.hasOwnProperty(h) && h !== 'id') {
-      sheet.getRange(rowIdx, i + 1).setValue(data[h]);
-    }
-  });
-  logAudit(actorId, 'update_payment', 'Payment:' + id, before, data);
-
-  // คำนวณยอดใหม่ทั้ง booking เดิมและ booking ปลายทาง (ถ้าย้าย payment ไปคนละ booking)
-  var oldBookingId = before && before.bookingId;
-  var newBookingId = data.bookingId || oldBookingId;
-  if (oldBookingId) recalcBookingPayments(oldBookingId, actorId);
-  if (newBookingId && newBookingId !== oldBookingId) recalcBookingPayments(newBookingId, actorId);
-
-  return { id: id };
 }
 
 function deletePayment(id, actorId) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAMES.PAYMENTS);
-  var rowIdx = findRowIndexById(sheet, id);
-  if (rowIdx === -1) throw new Error('Payment not found');
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('ระบบกำลังแก้ไขการชำระเงินรายการอื่น กรุณาลองใหม่อีกครั้ง');
 
-  var before = getPayment(id);
-  sheet.deleteRow(rowIdx);
-  logAudit(actorId, 'delete_payment', 'Payment:' + id, before, null);
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAMES.PAYMENTS);
+    var rowIdx = findRowIndexById(sheet, id);
+    if (rowIdx === -1) throw new Error('ไม่พบรายการชำระเงิน');
 
-  if (before && before.bookingId) recalcBookingPayments(before.bookingId, actorId);
-  return { id: id };
+    var before = getPayment(id);
+    sheet.deleteRow(rowIdx);
+    logAudit(actorId, 'delete_payment', 'Payment:' + id, before, null);
+    if (before && before.bookingId) {
+      recalcBookingPayments(before.bookingId, actorId);
+      return { id: id, summary: getPaymentSummary(before.bookingId) };
+    }
+    return { id: id };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
-// รวมยอดชำระทั้งหมดของ booking แล้วอัปเดตมัดจำ/ยอดคงเหลือให้อัตโนมัติ
-// เรียกทุกครั้งที่มีการสร้าง/แก้ไข/ลบ payment เพื่อให้ Bookings sheet ตรงกับ Payments เสมอ
-// รายการประเภท "refund" จะถูกหักออกจากยอดรวมแทนที่จะบวกเพิ่ม
+// รวมยอดจาก Payments แล้วเขียนยอดสรุปกลับไปยัง Bookings
 function recalcBookingPayments(bookingId, actorId) {
   var booking = getBooking(bookingId);
   if (!booking) return;
   var payments = listPayments({ bookingId: bookingId });
-  var totalPaid = payments.reduce(function (sum, p) {
-    var amt = Number(p.amount) || 0;
-    return p.type === 'refund' ? sum - amt : sum + amt;
-  }, 0);
-  updateBooking(bookingId, { deposit: totalPaid }, actorId || 'system');
+  var totalPaid = paymentTotal_(payments);
+  updateBooking(bookingId, { deposit: totalPaid, _paymentRecalc: true }, actorId || 'system');
 }
 
 // ---------- AUDIT LOG ----------

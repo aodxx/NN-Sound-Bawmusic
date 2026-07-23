@@ -5,13 +5,13 @@
 
 // เพิ่มเลขเวอร์ชันทุกครั้งที่มีการปล่อยไฟล์หน้าเว็บชุดใหม่
 // เพื่อบังคับให้ Service Worker ดาวน์โหลด App Shell ล่าสุดและลบแคชเก่า
-const CACHE_NAME = 'bawmusic-v3.5.0';
+const CACHE_NAME = 'bawmusic-v3.6.0';
 const APP_SHELL = [
   './',
   './index.html',
   './manifest.json',
   './css/style.css?v=3.5.0',
-  './js/api.js?v=3.5.0',
+  './js/api.js?v=3.6.0',
   './js/utils.js?v=3.5.0',
   './js/app.js?v=3.5.0',
   './js/views/dashboard.js',
@@ -19,9 +19,10 @@ const APP_SHELL = [
   './js/views/customers.js?v=3.3.2',
   './js/views/equipment.js?v=3.3.1',
   './js/views/analytics.js',
-  './js/views/history.js?v=2.5.0',
+  './js/views/history.js?v=3.6.0',
+  './js/paymentManager.js?v=3.6.0',
   './js/views/settings.js',
-  './js/views/bookingForm.js?v=3.5.0',
+  './js/views/bookingForm.js?v=3.6.0',
   './js/views/jobSummary.js',
   './assets/icons/icon-192.png',
   './assets/icons/icon-512.png',

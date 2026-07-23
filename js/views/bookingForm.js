@@ -21,11 +21,12 @@ async function openBookingForm(id, prefillDate) {
   Utils.loading('กำลังเตรียมฟอร์ม...');
 
   try {
-    const [equipment, templates, customers, existing] = await Promise.all([
+    const [equipment, templates, customers, existing, paymentSummary] = await Promise.all([
       __equipmentCache.length ? Promise.resolve(__equipmentCache) : BawmusicAPI.listEquipment(),
       BawmusicAPI.listTemplates(),
       BawmusicAPI.listCustomers(),
-      id ? BawmusicAPI.getBooking(id) : Promise.resolve(null)
+      id ? BawmusicAPI.getBooking(id) : Promise.resolve(null),
+      id ? BawmusicAPI.getPaymentSummary(id).catch(() => null) : Promise.resolve(null)
     ]);
     __equipmentCache = equipment;
     __bookingFormTemplates = templates || [];
@@ -49,7 +50,8 @@ async function openBookingForm(id, prefillDate) {
       deposit: existing?.deposit || '',
       remarks: existing?.remarks || '',
       status: existing?.status || 'confirmed',
-      equipment: existing?.equipment || [] // [{name, qty}]
+      equipment: existing?.equipment || [], // [{name, qty}]
+      paymentSummary: paymentSummary || null
     };
 
     Utils.closeLoading();
@@ -63,6 +65,12 @@ async function openBookingForm(id, prefillDate) {
 function paintBookingForm(equipment, templates) {
   const root = document.getElementById('modal-root');
   const s = __bookingFormState;
+  const displayPaid = s.paymentSummary && s.paymentSummary.totalPaid !== undefined
+    ? Number(s.paymentSummary.totalPaid) || 0
+    : (Number(s.deposit) || 0);
+  const displayRemaining = s.paymentSummary && s.paymentSummary.remaining !== undefined
+    ? Number(s.paymentSummary.remaining) || 0
+    : Math.max(0, (Number(s.price) || 0) - displayPaid);
 
   const categorized = {};
   equipment.forEach(e => {
@@ -170,11 +178,13 @@ function paintBookingForm(equipment, templates) {
           ${formInput('package', 'แพ็คเกจ', s.package, 'text')}
           <div class="grid grid-cols-2 gap-2.5">
             ${formInput('price', 'ราคาทั้งหมด (บาท)', s.price, 'number')}
-            ${formInput('deposit', 'มัดจำ (บาท)', s.deposit, 'number')}
+            ${s.id ? '<div><label class="text-base text-gray-500 block mb-1">ยอดชำระแล้ว (Payments)</label><div class="w-full bg-navy border border-green-400/20 rounded-lg px-3 py-3 text-base text-green-300 font-semibold">' + Utils.formatMoney(s.paymentSummary ? s.paymentSummary.totalPaid : s.deposit) + '</div><p class="text-xs text-gray-500 mt-1">แก้ไขยอดผ่านปุ่มจัดการการชำระเงินด้านล่าง</p></div>' : formInput('deposit', 'ชำระเริ่มต้น (บาท)', s.deposit, 'number')}
           </div>
-          <p class="text-base text-gray-400">ยอดคงเหลือ: <span class="text-gold font-medium" id="remaining-display">${Utils.formatMoney((Number(s.price) || 0) - (Number(s.deposit) || 0))}</span></p>
+          <p class="text-base text-gray-400">ยอดคงเหลือ: <span class="text-gold font-medium" id="remaining-display">${Utils.formatMoney(displayRemaining)}</span></p>
         </div>
       </section>
+
+      ${s.id ? paymentManagerSection(s) : ''}
 
       <!-- Equipment -->
       <section class="bg-navy-light rounded-2xl p-4 border border-gold/10 shadow-sm shadow-black/5">
@@ -208,6 +218,20 @@ function paintBookingForm(equipment, templates) {
     </div>
   </div>
   `;
+}
+
+function paymentManagerSection(s) {
+  const summary = s.paymentSummary || {};
+  const paid = summary.totalPaid !== undefined ? summary.totalPaid : (Number(s.deposit) || 0);
+  const remaining = summary.remaining !== undefined ? summary.remaining : Math.max(0, (Number(s.price) || 0) - paid);
+  const badge = typeof paymentStatusBadge === 'function' ? paymentStatusBadge(summary) : '';
+  const bookingId = String(s.id || '').replace(/'/g, "\\'");
+  return '<section class="bg-navy-light rounded-2xl p-4 border border-green-400/20 shadow-sm shadow-black/5">' +
+    '<div class="flex items-center justify-between mb-3"><h3 class="text-base font-semibold text-green-300"><i class="fa-solid fa-wallet mr-1.5"></i>การชำระเงิน</h3>' + badge + '</div>' +
+    '<div class="grid grid-cols-2 gap-2"><div class="bg-navy rounded-xl p-3"><small class="block text-xs text-gray-500">ชำระแล้ว</small><strong class="block text-base text-green-300 mt-1">' + Utils.formatMoney(paid) + '</strong></div>' +
+    '<div class="bg-navy rounded-xl p-3"><small class="block text-xs text-gray-500">คงเหลือ</small><strong class="block text-base text-amber-300 mt-1">' + Utils.formatMoney(remaining) + '</strong></div></div>' +
+    '<button type="button" onclick="openPaymentForm(\'' + bookingId + '\', \'booking-form\')" class="w-full mt-3 bg-green-400/10 border border-green-400/30 text-green-300 text-base font-semibold rounded-xl py-3"><i class="fa-solid fa-receipt mr-1.5"></i>จัดการการชำระเงิน</button>' +
+    '<p class="text-xs text-gray-500 mt-2"><i class="fa-solid fa-circle-info mr-1"></i>ยอดในส่วนนี้คำนวณจากแท็บ Payments อัตโนมัติ</p></section>';
 }
 
 function formInput(field, label, value, type) {
@@ -255,7 +279,10 @@ function equipmentCheckRow(e) {
 function updateField(field, value) {
   __bookingFormState[field] = value;
   if (field === 'price' || field === 'deposit') {
-    const remaining = (Number(__bookingFormState.price) || 0) - (Number(__bookingFormState.deposit) || 0);
+    const paid = __bookingFormState.paymentSummary && __bookingFormState.paymentSummary.totalPaid !== undefined
+      ? Number(__bookingFormState.paymentSummary.totalPaid) || 0
+      : (Number(__bookingFormState.deposit) || 0);
+    const remaining = Math.max(0, (Number(__bookingFormState.price) || 0) - paid);
     const el = document.getElementById('remaining-display');
     if (el) el.textContent = Utils.formatMoney(remaining);
   }
@@ -464,10 +491,14 @@ async function submitBookingForm() {
     }
 
     Utils.loading('กำลังบันทึก...');
+    const payload = { ...s };
+    delete payload.paymentSummary;
+    if (s.id) delete payload.deposit;
+
     if (s.id) {
-      await BawmusicAPI.updateBooking(s.id, s);
+      await BawmusicAPI.updateBooking(s.id, payload);
     } else {
-      await BawmusicAPI.createBooking(s);
+      await BawmusicAPI.createBooking(payload);
     }
 
     Utils.closeLoading();

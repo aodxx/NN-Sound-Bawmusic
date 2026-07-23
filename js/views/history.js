@@ -157,58 +157,7 @@ function paintHistoryDetail(b, payments) {
   `;
 }
 
-function historyPaymentRow(p) {
-  const typeLabels = { deposit: 'มัดจำ', partial: 'ชำระบางส่วน', final: 'ชำระเต็มจำนวน', refund: 'คืนเงิน' };
-  const isRefund = p.type === 'refund';
-  return `<div class="history-payment-row"><span class="history-payment-icon ${isRefund ? 'refund' : ''}"><i class="fa-solid ${isRefund ? 'fa-arrow-rotate-left' : 'fa-check'}"></i></span><span class="history-payment-copy"><strong>${typeLabels[p.type] || p.type || 'ชำระเงิน'}</strong><small>${Utils.formatDate(p.paymentDate)}${p.notes ? ' · ' + p.notes : ''}</small></span><strong class="${isRefund ? 'refund' : ''}">${isRefund ? '-' : '+'}${Utils.formatMoney(p.amount)}</strong></div>`;
-}
-
-function openPaymentForm(bookingId) {
-  const root = document.getElementById('modal-root');
-  root.insertAdjacentHTML('beforeend', `
-    <div class="history-detail-backdrop payment-form-backdrop" role="dialog" aria-modal="true">
-      <div class="payment-form-modal">
-        <header><h2>บันทึกการชำระเงิน</h2><button onclick="closePaymentForm()"><i class="fa-solid fa-xmark"></i></button></header>
-        <form onsubmit="submitPayment(event, '${bookingId}')">
-          <label>จำนวนเงิน (บาท)<input id="payment-amount" type="number" min="1" step="0.01" required placeholder="เช่น 2500"></label>
-          <label>ประเภทการชำระ<select id="payment-type"><option value="deposit">มัดจำ</option><option value="partial">ชำระบางส่วน</option><option value="final">ชำระเต็มจำนวน</option><option value="refund">คืนเงิน</option></select></label>
-          <label>วันที่ชำระ<input id="payment-date" type="date" value="${new Date().toISOString().slice(0, 10)}" required></label>
-          <label>หมายเหตุ<textarea id="payment-notes" rows="2" placeholder="เช่น โอนผ่านธนาคาร..." ></textarea></label>
-          <p class="payment-form-note"><i class="fa-solid fa-circle-info"></i> รอบนี้บันทึกยอดเงินก่อน ส่วนแนบสลิป Google Drive จะเพิ่มในขั้นถัดไป</p>
-          <button class="history-detail-primary" type="submit">บันทึกการชำระเงิน</button>
-        </form>
-      </div>
-    </div>
-  `);
-}
-
-async function submitPayment(event, bookingId) {
-  event.preventDefault();
-  const data = {
-    bookingId,
-    amount: Number(document.getElementById('payment-amount').value),
-    type: document.getElementById('payment-type').value,
-    paymentDate: document.getElementById('payment-date').value,
-    notes: document.getElementById('payment-notes').value.trim()
-  };
-  Utils.loading('กำลังบันทึกยอดชำระ...');
-  try {
-    await BawmusicAPI.call('createPayment', { data }, true);
-    closePaymentForm();
-    const [booking, payments] = await Promise.all([BawmusicAPI.getBooking(bookingId), BawmusicAPI.call('listPayments', { bookingId }, true)]);
-    Utils.closeLoading();
-    paintHistoryDetail(booking, payments || []);
-    Utils.toast('success', 'บันทึกการชำระเงินแล้ว');
-  } catch (err) {
-    Utils.closeLoading();
-    Utils.toast('error', 'บันทึกไม่สำเร็จ: ' + err.message);
-  }
-}
-
-function closePaymentForm() {
-  const modal = document.querySelector('.payment-form-backdrop');
-  if (modal) modal.remove();
-}
+// Payment controls are provided by js/paymentManager.js.
 
 function historyDetailItem(label, value, icon, wide) {
   return `<div class="history-detail-item ${wide ? 'history-detail-item-wide' : ''}"><small><i class="fa-solid ${icon}"></i>${label}</small><strong>${value || '-'}</strong></div>`;

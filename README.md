@@ -3,8 +3,9 @@
 
 ระบบจัดการการจองงานสำหรับวงดนตรีและทีมงานอีเวนต์ ใช้สำหรับจัดการงาน ลูกค้า อุปกรณ์ การชำระเงิน และการจองผ่าน LINE ในระบบเดียว
 
-> เอกสารนี้อ้างอิงโค้ดชุดปัจจุบันของระบบ รวมการปรับปรุงใน PR #41> Frontend cache version: <code>3.5.0</code>  
-> Backend database schema version: <code>3.4.0</code>
+> เอกสารนี้อ้างอิงโค้ดชุดปัจจุบันของระบบ รวมการปรับปรุงการเงินในเฟส Payments  
+> Frontend cache version: <code>3.6.0</code>  
+> Backend database schema version: <code>3.5.0</code>
 
 Repository: https://github.com/aodxx/NN-Sound-Bawmusic  
 GitHub Pages: https://aodxx.github.io/NN-Sound-Bawmusic/
@@ -200,7 +201,9 @@ flowchart LR
 - ดูอุปกรณ์ที่ใช้
 - ดูสรุปการเงิน
 - ดูประวัติการชำระเงิน
-- เพิ่มรายการชำระเงิน
+- เพิ่ม แก้ไข และลบรายการชำระเงินจากงานปัจจุบันหรือประวัติงาน
+- เลือกประเภทและช่องทางการชำระเงิน พร้อมแนบลิงก์หลักฐานได้
+- ระบบคำนวณยอดชำระแล้ว/ยอดคงเหลือจาก Payments ให้อัตโนมัติ
 - เปิดสรุปงานเพื่อแชร์
 - บันทึกสรุปเป็นรูป PNG
 - พิมพ์สรุปงาน
@@ -320,9 +323,11 @@ Session ปัจจุบันมีอายุ 21,600 วินาที ห
 
 ### StatisticsCache
 
-เก็บข้อมูลแคชสถิติ:
+เป็นโครงสร้างสำหรับ cache สถิติในอนาคต:
 
 <code>key</code>, <code>value</code>, <code>updatedAt</code>
+
+ปัจจุบัน Dashboard และ Analytics คำนวณจากข้อมูลสดในชีต Bookings จึงปล่อยแท็บนี้ว่างไว้เป็นเรื่องปกติ และไม่ควรกรอกข้อมูลด้วยตนเอง ระบบจะเริ่มใช้ cache เมื่อปริมาณข้อมูลมากจนการคำนวณสดเริ่มช้าลง
 
 ### Members
 
@@ -334,7 +339,7 @@ Session ปัจจุบันมีอายุ 21,600 วินาที ห
 
 เก็บรายการชำระเงิน:
 
-<code>id</code>, <code>bookingId</code>, <code>amount</code>, <code>type</code>, <code>paymentDate</code>, <code>evidenceUrl</code>, <code>notes</code>, <code>createdAt</code>
+<code>id</code>, <code>bookingId</code>, <code>amount</code>, <code>type</code>, <code>paymentDate</code>, <code>evidenceUrl</code>, <code>notes</code>, <code>createdAt</code>, <code>method</code>
 
 ### AuditLog
 
