@@ -159,10 +159,16 @@ async function deletePaymentConfirm(paymentId, bookingId, returnTo) {
   try {
     await BawmusicAPI.deletePayment(paymentId);
     Utils.closeLoading();
-    if ((returnTo || 'history') === 'booking-form' && typeof openBookingForm === 'function') {
-      await openBookingForm(bookingId);
-    } else if (typeof openHistoryDetail === 'function') {
-      await openHistoryDetail(bookingId);
+
+    // การลบสำเร็จแล้ว แม้การวาดหน้าจอถัดไปจะมีปัญหา ก็ไม่ควรแจ้งผลลวงว่า “ลบไม่สำเร็จ”
+    try {
+      if ((returnTo || 'history') === 'booking-form' && typeof openBookingForm === 'function') {
+        await openBookingForm(bookingId);
+      } else if (typeof openHistoryDetail === 'function') {
+        await openHistoryDetail(bookingId);
+      }
+    } catch (refreshError) {
+      console.error('Payment delete view refresh failed:', refreshError);
     }
     Utils.toast('success', 'ลบรายการชำระเงินแล้ว');
   } catch (err) {
