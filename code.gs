@@ -1408,33 +1408,7 @@ function submitLiffBooking(idToken, data) {
   var profile = prepareLineProfile_(verifyLineIdToken(idToken)); // throws ถ้า token ไม่ถูกต้อง
   upsertMember(profile);
 
-  var customers = listCustomers({});
-  var existing = customers.find(function (c) { return c.memberId === profile.lineUserId; });
-  if (!existing && data.phone) {
-    existing = customers.find(function (c) { return c.phone && String(c.phone).trim() === String(data.phone).trim(); });
-  }
-
-  var customerId;
-  var customerName = (data.customerName || profile.displayName || '').trim();
-
-  if (existing) {
-    var updates = {};
-    if (!existing.memberId) updates.memberId = profile.lineUserId;
-    if (data.phone && data.phone !== existing.phone) updates.phone = data.phone;
-    if (customerName && customerName !== existing.name) updates.name = customerName;
-    if (Object.keys(updates).length) updateCustomer(existing.id, updates, profile.lineUserId);
-    customerId = existing.id;
-  } else {
-    var created = createCustomer({
-      name: customerName || 'ลูกค้า LINE',
-      phone: data.phone || '',
-      line: profile.displayName || '',
-      memberId: profile.lineUserId
-    }, profile.lineUserId);
-    customerId = created.id;
-  }
-
-  // ตรวจซ้ำภายใต้ Script Lock: คำขอที่เข้าพร้อมกันจะถูกตรวจทีละรายการ
+  // ล็อกตั้งแต่ตรวจคิวจนถึงสร้างลูกค้า/การจอง เพื่อกันข้อมูลซ้ำจากคำขอที่เข้าพร้อมกัน
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(10000)) {
     throw new Error('ระบบกำลังตรวจคำขอจองหลายรายการพร้อมกัน กรุณาลองใหม่อีกครั้ง');
@@ -1450,6 +1424,31 @@ function submitLiffBooking(idToken, data) {
     });
     if (conflict.hasConflict) {
       throw new Error(buildLiffConflictMessage_(conflict));
+    }
+
+    var customers = listCustomers({});
+    var existing = customers.find(function (c) { return c.memberId === profile.lineUserId; });
+    if (!existing && data.phone) {
+      existing = customers.find(function (c) { return c.phone && String(c.phone).trim() === String(data.phone).trim(); });
+    }
+
+    var customerId;
+    var customerName = (data.customerName || profile.displayName || '').trim();
+    if (existing) {
+      var updates = {};
+      if (!existing.memberId) updates.memberId = profile.lineUserId;
+      if (data.phone && data.phone !== existing.phone) updates.phone = data.phone;
+      if (customerName && customerName !== existing.name) updates.name = customerName;
+      if (Object.keys(updates).length) updateCustomer(existing.id, updates, profile.lineUserId);
+      customerId = existing.id;
+    } else {
+      var created = createCustomer({
+        name: customerName || 'ลูกค้า LINE',
+        phone: data.phone || '',
+        line: profile.displayName || '',
+        memberId: profile.lineUserId
+      }, profile.lineUserId);
+      customerId = created.id;
     }
 
     booking = createBooking({
