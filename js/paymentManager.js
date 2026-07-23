@@ -134,10 +134,15 @@ async function submitPayment(event) {
     closePaymentForm();
     Utils.closeLoading();
 
-    if (ctx.returnTo === 'booking-form' && typeof openBookingForm === 'function') {
-      await openBookingForm(ctx.bookingId);
-    } else if (typeof openHistoryDetail === 'function') {
-      await openHistoryDetail(ctx.bookingId);
+    // ถ้ารีเฟรชหน้าจอหลังบันทึกล้มเหลว จะไม่เปลี่ยนผลลัพธ์ของการบันทึกเงินจริง
+    try {
+      if (ctx.returnTo === 'booking-form' && typeof openBookingForm === 'function') {
+        await openBookingForm(ctx.bookingId);
+      } else if (typeof openHistoryDetail === 'function') {
+        await openHistoryDetail(ctx.bookingId);
+      }
+    } catch (refreshError) {
+      console.error('Payment view refresh failed:', refreshError);
     }
     Utils.toast('success', ctx.paymentId ? 'แก้ไขรายการชำระเงินแล้ว' : 'บันทึกการชำระเงินแล้ว');
   } catch (err) {
