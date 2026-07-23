@@ -354,6 +354,13 @@
       color: #f5d0fe;
       background: rgba(246,55,236,.13);
     }
+    .calendar-day.available {
+      border-color: rgba(74,222,128,.22);
+      color: #bbf7d0;
+      background: rgba(74,222,128,.06);
+    }
+    .calendar-day.available:active { transform: scale(.96); }
+    .calendar-day.available .day-note { color: #86efac; }
     .calendar-day.blank { min-height: 48px; }
     .day-dot {
       width: 5px;
@@ -374,6 +381,7 @@
     }
     .legend span { display: inline-flex; align-items: center; gap: 5px; }
     .legend-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--pink); }
+    .legend-dot.available { background: var(--green); }
     .legend-dot.today { border: 1px solid var(--cyan); background: transparent; }
 
     .footer-actions {
@@ -527,11 +535,12 @@
         </div>
         <div class="legend">
           <span><i class="legend-dot"></i>มีงานยืนยันแล้ว</span>
+          <span><i class="legend-dot available"></i>แตะเพื่อเริ่มจอง</span>
           <span><i class="legend-dot today"></i>วันนี้</span>
         </div>
         <div id="schedule-message" class="notice info hidden" style="margin-top:13px;margin-bottom:0">
           <i class="fa-solid fa-circle-info"></i>
-          <span>หน้านี้แสดงเพียงวันที่มีงาน ไม่เปิดเผยชื่อลูกค้า สถานที่ เวลา หรือรายละเอียดการจอง</span>
+          <span>หน้านี้แสดงเฉพาะวันที่มีงานยืนยันแล้ว และแตะวันที่ว่างเพื่อเริ่มกรอกคำขอจองได้ โดยไม่เปิดเผยรายละเอียดของงานอื่น</span>
         </div>
       </section>
     </main>
@@ -942,7 +951,8 @@
       var monthNumber = parts[1];
       var firstDay = new Date(year, monthNumber - 1, 1).getDay();
       var dayCount = new Date(year, monthNumber, 0).getDate();
-      var todayKey = monthKey(new Date());
+      var now = new Date();
+      var todayKey = dateKey(now.getFullYear(), now.getMonth() + 1, now.getDate());
       var booked = {};
       (bookedDates || []).forEach(function (date) { booked[String(date).substring(0, 10)] = true; });
 
@@ -954,14 +964,29 @@
       for (var day = 1; day <= dayCount; day++) {
         var key = dateKey(year, monthNumber, day);
         var isBooked = !!booked[key];
-        var isToday = key === new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0') + '-' + String(new Date().getDate()).padStart(2, '0');
-        html += '<div class="calendar-day' + (isBooked ? ' booked' : '') + (isToday ? ' today' : '') + '"' +
-          ' aria-label="' + escapeHtml(formatDateThai(key) + (isBooked ? ' มีงานยืนยันแล้ว' : '')) + '">' +
-          '<span>' + day + '</span>' +
-          (isBooked ? '<span class="day-dot"></span><span class="day-note">มีงาน</span>' : '') +
-        '</div>';
+        var isToday = key === todayKey;
+        var isPast = key < todayKey;
+        var label = formatDateThai(key);
+        var dayClasses = 'calendar-day' + (isToday ? ' today' : '');
+
+        if (isBooked) {
+          html += '<div class="' + dayClasses + ' booked" aria-label="' + escapeHtml(label + ' มีงานยืนยันแล้ว') + '">' +
+            '<span>' + day + '</span><span class="day-dot"></span><span class="day-note">มีงาน</span></div>';
+        } else if (!isPast) {
+          html += '<button type="button" class="' + dayClasses + ' available" onclick="openBookingForDate(\'' + key + '\')" ' +
+            'aria-label="' + escapeHtml(label + ' เลือกจองได้') + '">' +
+            '<span>' + day + '</span><span class="day-note">เลือกจอง</span></button>';
+        } else {
+          html += '<div class="' + dayClasses + '" aria-label="' + escapeHtml(label + ' ผ่านแล้ว') + '">' +
+            '<span>' + day + '</span></div>';
+        }
       }
       byId('calendar-grid').innerHTML = html;
+    }
+
+    function openBookingForDate(date) {
+      var bookingLiffUrl = 'https://liff.line.me/2007938843-WTd19n2O/?date=' + encodeURIComponent(date);
+      window.location.href = bookingLiffUrl;
     }
 
     async function loadSchedule() {
