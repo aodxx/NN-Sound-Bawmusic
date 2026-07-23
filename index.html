@@ -38,7 +38,7 @@
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<link rel="stylesheet" href="css/style.css?v=3.3.0">
+<link rel="stylesheet" href="css/style.css?v=3.5.0">
 
 <script>
   tailwind.config = {
@@ -83,6 +83,13 @@
     </div>
   </div>
   <div class="flex items-center gap-2">
+    <button x-show="pendingBookingCount > 0" @click="openPendingBookings()" type="button"
+      class="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-300 active:scale-90 transition-transform"
+      :aria-label="'มีคำขอจองรอยืนยัน ' + pendingBookingCount + ' รายการ'">
+      <i class="fa-solid fa-bell"></i>
+      <span class="pending-notification-dot absolute right-2 top-2" aria-hidden="true"></span>
+      <span class="pending-notification-badge absolute -right-1 -top-1" x-text="pendingBookingCount > 99 ? '99+' : pendingBookingCount"></span>
+    </button>
     <button x-show="!isStandalone()" @click="installApp()" class="w-11 h-11 rounded-2xl bg-navy-light/80 flex items-center justify-center text-gold active:scale-90 transition-transform">
       <i class="fa-solid fa-arrow-down-to-bracket"></i>
     </button>
@@ -171,6 +178,9 @@
         :class="currentView === item.view ? 'text-gold bg-gold/10' : 'text-gray-500'">
         <i class="fa-solid text-lg" :class="item.icon"></i>
         <span class="text-base font-medium" x-text="item.label"></span>
+        <template x-if="item.view === 'bookings' && pendingBookingCount > 0">
+          <span class="pending-notification-badge absolute right-2 top-1" x-text="pendingBookingCount > 99 ? '99+' : pendingBookingCount"></span>
+        </template>
       </button>
     </template>
   </div>
@@ -182,8 +192,8 @@
 <!-- Toast container handled by SweetAlert2 -->
 
 <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-<script src="js/api.js?v=3.4.2"></script>
-<script src="js/utils.js?v=3.4.2"></script>
+<script src="js/api.js?v=3.5.0"></script>
+<script src="js/utils.js?v=3.5.0"></script>
 <script>
   // ดักจับ error ที่ไม่ถูกจัดการทั้งหมด แสดงผลให้เห็นแทนหน้าจอขาวเงียบๆ
   window.addEventListener('error', function (e) {
@@ -200,7 +210,7 @@
   });
 </script>
 <script src="js/views/dashboard.js"></script>
-<script src="js/views/bookings.js"></script>
+<script src="js/views/bookings.js?v=3.5.0"></script>
 <script src="js/views/customers.js?v=3.3.2"></script>
 <script src="js/views/equipment.js?v=3.3.1"></script>
 <script src="js/views/analytics.js"></script>
@@ -208,12 +218,12 @@
 <script src="js/views/settings.js"></script>
 <script src="js/views/bookingForm.js?v=3.3.0"></script>
 <script src="js/views/jobSummary.js"></script>
-<script src="js/app.js?v=3.4.2"></script>
+<script src="js/app.js?v=3.5.0"></script>
 
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {
-      navigator.serviceWorker.register('service-worker.js?v=3.4.2').catch(function (e) { console.warn('SW registration failed', e); });
+      navigator.serviceWorker.register('service-worker.js?v=3.5.0').catch(function (e) { console.warn('SW registration failed', e); });
     });
   }
 </script>
