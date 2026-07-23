@@ -65,6 +65,12 @@ async function openBookingForm(id, prefillDate) {
 function paintBookingForm(equipment, templates) {
   const root = document.getElementById('modal-root');
   const s = __bookingFormState;
+  const displayPaid = s.paymentSummary && s.paymentSummary.totalPaid !== undefined
+    ? Number(s.paymentSummary.totalPaid) || 0
+    : (Number(s.deposit) || 0);
+  const displayRemaining = s.paymentSummary && s.paymentSummary.remaining !== undefined
+    ? Number(s.paymentSummary.remaining) || 0
+    : Math.max(0, (Number(s.price) || 0) - displayPaid);
 
   const categorized = {};
   equipment.forEach(e => {
@@ -174,7 +180,7 @@ function paintBookingForm(equipment, templates) {
             ${formInput('price', 'ราคาทั้งหมด (บาท)', s.price, 'number')}
             ${s.id ? '<div><label class="text-base text-gray-500 block mb-1">ยอดชำระแล้ว (Payments)</label><div class="w-full bg-navy border border-green-400/20 rounded-lg px-3 py-3 text-base text-green-300 font-semibold">' + Utils.formatMoney(s.paymentSummary ? s.paymentSummary.totalPaid : s.deposit) + '</div><p class="text-xs text-gray-500 mt-1">แก้ไขยอดผ่านปุ่มจัดการการชำระเงินด้านล่าง</p></div>' : formInput('deposit', 'ชำระเริ่มต้น (บาท)', s.deposit, 'number')}
           </div>
-          <p class="text-base text-gray-400">ยอดคงเหลือ: <span class="text-gold font-medium" id="remaining-display">${Utils.formatMoney((Number(s.price) || 0) - (Number(s.deposit) || 0))}</span></p>
+          <p class="text-base text-gray-400">ยอดคงเหลือ: <span class="text-gold font-medium" id="remaining-display">${Utils.formatMoney(displayRemaining)}</span></p>
         </div>
       </section>
 
@@ -273,7 +279,10 @@ function equipmentCheckRow(e) {
 function updateField(field, value) {
   __bookingFormState[field] = value;
   if (field === 'price' || field === 'deposit') {
-    const remaining = (Number(__bookingFormState.price) || 0) - (Number(__bookingFormState.deposit) || 0);
+    const paid = __bookingFormState.paymentSummary && __bookingFormState.paymentSummary.totalPaid !== undefined
+      ? Number(__bookingFormState.paymentSummary.totalPaid) || 0
+      : (Number(__bookingFormState.deposit) || 0);
+    const remaining = Math.max(0, (Number(__bookingFormState.price) || 0) - paid);
     const el = document.getElementById('remaining-display');
     if (el) el.textContent = Utils.formatMoney(remaining);
   }
