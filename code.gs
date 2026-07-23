@@ -657,7 +657,6 @@ function checkLiffAvailability(date, startTime, endTime) {
     available: !conflict.hasConflict,
     hasConflict: !!conflict.hasConflict,
     dateConflict: !!conflict.dateConflict,
-    conflictingCount: (conflict.conflictingBookings || []).length,
     message: conflict.hasConflict
       ? buildLiffConflictMessage_(conflict)
       : 'ยังไม่พบงานที่ชนกับวันที่และเวลานี้'
