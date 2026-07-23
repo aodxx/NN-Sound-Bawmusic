@@ -60,6 +60,10 @@
     border: 1px solid rgba(34,211,238,.16); border-radius: .65rem;
     color: #67e8f9; background: #13131f;
   }
+  .public-equipment-card { transition: transform .15s ease, border-color .15s ease, background .15s ease, box-shadow .15s ease; }
+  .public-equipment-card:active { transform: scale(.98); }
+  .public-equipment-card.is-selected { border-color: rgba(34,211,238,.8) !important; background: rgba(34,211,238,.12) !important; box-shadow: 0 0 0 1px rgba(34,211,238,.24); }
+  .public-equipment-card.is-disabled { opacity: .55; cursor: not-allowed; }
 </style>
 </head>
 <body class="font-kanit bg-navy-dark text-gray-100 min-h-screen">
@@ -103,6 +107,9 @@
         <label class="text-sm text-gray-500 block mb-1">เบอร์โทรติดต่อกลับ</label>
         <input id="field-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="08XXXXXXXX"
           class="w-full bg-navy border border-gold/10 rounded-lg px-3 py-3 text-base text-gray-100 focus:outline-none focus:border-gold/40">
+        <p id="phone-status" class="text-xs text-gray-500 mt-1.5" aria-live="polite">
+          ระบบจะเติมเบอร์จาก LINE ให้เมื่อบัญชีได้รับอนุญาต หากไม่พบกรุณากรอกด้วยตนเอง
+        </p>
       </div>
 
       <div>
@@ -110,6 +117,12 @@
         <input id="field-venue" type="text" autocomplete="street-address" placeholder="ชื่อสถานที่ / ที่อยู่โดยย่อ"
           class="w-full bg-navy border border-gold/10 rounded-lg px-3 py-3 text-base text-gray-100 focus:outline-none focus:border-gold/40">
         <p class="text-xs text-gray-500 mt-1.5">พิมพ์ชื่อสถานที่หรือที่อยู่ได้ตามปกติ แล้วเลือกแนบพิกัดเพื่อให้ทางวงเดินทางได้ง่ายขึ้น</p>
+        <div class="mt-2 rounded-xl border border-gold/10 bg-gold/5 px-3 py-2.5 text-xs text-gray-400">
+          <p class="font-medium text-gold"><i class="fa-solid fa-circle-info mr-1"></i>เลือกวิธีระบุสถานที่ให้ตรงกับสถานการณ์</p>
+          <p class="mt-1"><span class="text-gray-200">อยู่ที่หน้างานแล้ว:</span> กด “ใช้ตำแหน่งปัจจุบัน” เพื่อแนบพิกัด GPS</p>
+          <p class="mt-1"><span class="text-gray-200">ยังไม่ได้อยู่หน้างาน:</span> พิมพ์ชื่อ/ที่อยู่ หรือเปิด Google Maps ปักหมุดแล้ววางลิงก์</p>
+          <p class="mt-1 text-gray-500">ระบบอ่านตำแหน่งเฉพาะตอนกดปุ่ม และไม่ติดตามตำแหน่งต่อเนื่อง</p>
+        </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
           <button id="btn-use-location" type="button" onclick="useCurrentLocation()"
             class="rounded-lg border border-gold/20 bg-gold/10 px-3 py-2.5 text-sm font-medium text-gold active:scale-[0.98] transition-transform">
@@ -186,13 +199,15 @@
       </div>
 
       <section id="public-equipment-section" class="hidden-init border-t border-gold/10 pt-4">
-        <div class="flex items-center justify-between mb-2">
+        <div class="flex items-start justify-between gap-3 mb-2">
           <div>
-            <p class="text-base text-gray-100 font-semibold"><i class="fa-solid fa-boxes-stacked text-gold mr-1.5"></i>อุปกรณ์จริงของเรา</p>
-            <p class="text-xs text-gray-500">ดูภาพอุปกรณ์ก่อนส่งคำขอจอง</p>
+            <p class="text-base text-gray-100 font-semibold"><i class="fa-solid fa-boxes-stacked text-gold mr-1.5"></i>เลือกอุปกรณ์ที่ต้องการ</p>
+            <p class="text-xs text-gray-500">แตะการ์ดเพื่อเลือกอุปกรณ์จริงของเรา</p>
           </div>
+          <span id="public-equipment-summary" class="shrink-0 rounded-full bg-gold/10 px-2.5 py-1 text-xs font-medium text-gold">ยังไม่ได้เลือก</span>
         </div>
         <div id="public-equipment-grid" class="grid grid-cols-2 gap-3"></div>
+        <p class="mt-2 text-xs text-gray-500"><i class="fa-solid fa-circle-info mr-1"></i>อุปกรณ์ที่เลือกจะถูกตรวจสอบคิวและจำนวนพร้อมใช้งานอีกครั้งก่อนส่งคำขอ</p>
       </section>
 
       <div>
@@ -256,6 +271,8 @@
   let idToken = null;
   let liffProfile = null;
   let availabilityMonth = '';
+  let publicEquipment = [];
+  const selectedEquipment = {};
   const availabilityCache = {};
 
   function showScreen(id) {
@@ -602,12 +619,73 @@
     })[category] || category || 'อุปกรณ์';
   }
 
+  function equipmentKey(item) {
+    return String((item && (item.id || item.name)) || '');
+  }
+
+  function equipmentAvailableQty(item) {
+    const value = Number(item && item.availableQty);
+    return isFinite(value) && value > 0 ? Math.floor(value) : 0;
+  }
+
+  function getSelectedEquipmentPayload() {
+    return publicEquipment.map(function (item) {
+      const key = equipmentKey(item);
+      const qty = Number(selectedEquipment[key]) || 0;
+      if (!key || qty <= 0) return null;
+      return { id: item.id || '', name: item.name || '', qty: qty, unit: item.unit || '' };
+    }).filter(Boolean);
+  }
+
+  function updateEquipmentSummary() {
+    const element = document.getElementById('public-equipment-summary');
+    if (!element) return;
+    const selected = getSelectedEquipmentPayload();
+    const totalQty = selected.reduce(function (sum, item) { return sum + Number(item.qty || 0); }, 0);
+    element.textContent = selected.length ? 'เลือก ' + selected.length + ' รายการ · ' + totalQty + ' ชิ้น' : 'ยังไม่ได้เลือก';
+  }
+
+  function toggleEquipmentSelection(key) {
+    const item = publicEquipment.find(function (entry) { return equipmentKey(entry) === String(key); });
+    if (!item || equipmentAvailableQty(item) <= 0) return;
+    const current = Number(selectedEquipment[key]) || 0;
+    if (current > 0) delete selectedEquipment[key];
+    else selectedEquipment[key] = 1;
+    renderPublicEquipment(publicEquipment);
+    clearServerAvailabilityStatus();
+  }
+
+  function adjustEquipmentQuantity(event, key, delta) {
+    if (event && event.stopPropagation) event.stopPropagation();
+    const item = publicEquipment.find(function (entry) { return equipmentKey(entry) === String(key); });
+    if (!item) return;
+    const max = equipmentAvailableQty(item);
+    const next = Math.max(0, Math.min(max, (Number(selectedEquipment[key]) || 0) + Number(delta || 0)));
+    if (next <= 0) delete selectedEquipment[key];
+    else selectedEquipment[key] = next;
+    renderPublicEquipment(publicEquipment);
+    clearServerAvailabilityStatus();
+  }
+
   function renderPublicEquipment(items) {
     const section = document.getElementById('public-equipment-section');
     const grid = document.getElementById('public-equipment-grid');
-    if (!section || !grid || !Array.isArray(items) || !items.length) return;
+    if (!section || !grid) return;
 
-    grid.innerHTML = items.map(item => {
+    publicEquipment = Array.isArray(items) ? items : [];
+    if (!publicEquipment.length) {
+      grid.innerHTML = '<div class="col-span-2 rounded-xl border border-gold/10 bg-navy p-4 text-center text-xs text-gray-500">ยังไม่มีอุปกรณ์ที่เปิดให้ลูกค้าเลือก</div>';
+      section.classList.remove('hidden-init');
+      updateEquipmentSummary();
+      return;
+    }
+
+    grid.innerHTML = publicEquipment.map(function (item) {
+      const key = equipmentKey(item);
+      const safeKey = escapeHtml(key);
+      const selected = Number(selectedEquipment[key]) || 0;
+      const availableQty = equipmentAvailableQty(item);
+      const isDisabled = availableQty <= 0;
       const imageUrl = escapeHtml(item.imageUrl || '');
       const image = imageUrl ? `
         <img src="${imageUrl}" alt="${escapeHtml(item.name)}" class="w-full h-28 object-cover"
@@ -615,24 +693,49 @@
         <div class="w-full h-28 items-center justify-center bg-navy text-gray-500" style="display:none"><i class="fa-solid fa-box text-xl"></i></div>
       ` : `<div class="w-full h-28 flex items-center justify-center bg-navy text-gray-500"><i class="fa-solid fa-box text-xl"></i></div>`;
       return `
-        <article class="overflow-hidden rounded-xl border border-gold/10 bg-navy-light shadow-sm">
-          <div class="overflow-hidden bg-navy">${image}</div>
-          <div class="p-2.5">
-            <p class="text-sm font-semibold text-gray-100 truncate">${escapeHtml(item.name)}</p>
-            <p class="text-xs text-gray-500 mt-0.5">${escapeHtml(equipmentCategoryLabel(item.category))}</p>
-          </div>
+        <article class="overflow-hidden rounded-xl border ${selected ? 'border-gold bg-gold/10 ring-1 ring-gold/30' : 'border-gold/10 bg-navy-light'} shadow-sm ${isDisabled ? 'opacity-60' : ''}">
+          <button type="button" onclick="toggleEquipmentSelection('${safeKey}')" class="public-equipment-card ${selected ? 'is-selected' : ''} ${isDisabled ? 'is-disabled' : ''} block w-full text-left" ${isDisabled ? 'disabled' : ''} aria-pressed="${selected > 0 ? 'true' : 'false'}">
+            <div class="relative overflow-hidden bg-navy">
+              ${image}
+              <span class="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full ${selected ? 'bg-gold text-navy-dark' : 'bg-navy/80 text-gray-400'}">
+                <i class="fa-solid ${selected ? 'fa-check' : 'fa-plus'} text-xs"></i>
+              </span>
+            </div>
+            <div class="p-2.5">
+              <p class="truncate text-sm font-semibold text-gray-100">${escapeHtml(item.name)}</p>
+              <p class="mt-0.5 text-xs text-gray-500">${escapeHtml(equipmentCategoryLabel(item.category))}</p>
+              <p class="mt-1 text-xs ${isDisabled ? 'text-red-300' : 'text-green-300'}">${isDisabled ? 'ยังไม่พร้อมใช้งาน' : 'พร้อม ' + availableQty + ' ' + escapeHtml(item.unit || 'ชิ้น')}</p>
+            </div>
+          </button>
+          ${selected ? `
+            <div class="flex items-center justify-between border-t border-gold/10 bg-navy/40 px-2.5 py-2">
+              <span class="text-xs text-gray-400">จำนวน</span>
+              <div class="flex items-center gap-2">
+                <button type="button" onclick="adjustEquipmentQuantity(event, '${safeKey}', -1)" class="h-8 w-8 rounded-lg bg-navy text-gold" aria-label="ลดจำนวน"><i class="fa-solid fa-minus"></i></button>
+                <span class="min-w-5 text-center text-sm font-semibold text-gold">${selected}</span>
+                <button type="button" onclick="adjustEquipmentQuantity(event, '${safeKey}', 1)" class="h-8 w-8 rounded-lg bg-navy text-gold" aria-label="เพิ่มจำนวน"><i class="fa-solid fa-plus"></i></button>
+              </div>
+            </div>
+          ` : ''}
         </article>
       `;
     }).join('');
     section.classList.remove('hidden-init');
+    updateEquipmentSummary();
   }
 
   async function loadPublicEquipment() {
+    const section = document.getElementById('public-equipment-section');
+    const grid = document.getElementById('public-equipment-grid');
     try {
       const equipment = await callApi('listPublicEquipment');
       renderPublicEquipment(equipment);
     } catch (err) {
-      console.warn('โหลดรูปอุปกรณ์สำหรับลูกค้าไม่สำเร็จ:', err.message);
+      console.warn('โหลดอุปกรณ์สำหรับลูกค้าไม่สำเร็จ:', err.message);
+      if (section && grid) {
+        grid.innerHTML = '<div class="col-span-2 rounded-xl border border-red-400/20 bg-red-400/5 p-4 text-center text-xs text-red-200">โหลดอุปกรณ์ไม่สำเร็จ กรุณาลองเปิดหน้าใหม่อีกครั้ง</div>';
+        section.classList.remove('hidden-init');
+      }
     }
   }
 
@@ -712,7 +815,8 @@
       endTime: document.getElementById('field-endTime').value,
       jobType: selectedJobType,
       remarks: document.getElementById('field-remarks').value.trim(),
-      mapLink: document.getElementById('field-mapLink').value.trim()
+      mapLink: document.getElementById('field-mapLink').value.trim(),
+      equipment: getSelectedEquipmentPayload()
     };
 
     try {
@@ -745,7 +849,8 @@
       const availability = await callApi('checkLiffAvailability', {
         date: data.date,
         startTime: data.startTime,
-        endTime: data.endTime
+        endTime: data.endTime,
+        equipment: data.equipment
       });
 
       if (!availability || availability.hasConflict) {
@@ -810,7 +915,17 @@
 
       // ยืนยันตัวตนกับ backend ล่วงหน้า เพื่อบันทึกสมาชิกไว้ก่อนกรอกฟอร์ม
       document.getElementById('loading-text').textContent = 'กำลังเตรียมฟอร์มจอง...';
-      await callApi('verifyAndUpsertMember', { idToken });
+      const member = await callApi('verifyAndUpsertMember', { idToken });
+      const phoneField = document.getElementById('field-phone');
+      const phoneStatus = document.getElementById('phone-status');
+      if (member && member.phone) {
+        phoneField.value = member.phone;
+        phoneStatus.textContent = 'เติมเบอร์โทรจากข้อมูล LINE แล้ว กรุณาตรวจสอบก่อนส่งคำขอ';
+        phoneStatus.className = 'text-xs text-green-300 mt-1.5';
+      } else {
+        phoneStatus.textContent = 'LINE ยังไม่ได้ส่งเบอร์โทรมา กรุณากรอกเบอร์โทรด้วยตนเอง';
+        phoneStatus.className = 'text-xs text-yellow-300 mt-1.5';
+      }
 
       showScreen('screen-form');
       applyInitialBookingDate();
