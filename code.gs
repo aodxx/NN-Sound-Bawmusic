@@ -40,7 +40,7 @@ var DRIVE_DEFAULT_FOLDER_IDS = {
 
 // Action ที่เปิดให้เรียกได้โดยไม่ต้องมี session ของแอป (ใช้จากหน้า LIFF ของลูกค้า)
 // การเรียกใช้งานระบบแอดมินต้องส่ง sessionToken ที่ออกโดย createSession
-var PUBLIC_ACTIONS = ['createSession', 'submitLiffBooking', 'verifyAndUpsertMember', 'verifyLineToken', 'getBookingByToken', 'listPublicEquipment', 'getMyBookings', 'listPublicSchedule'];
+var PUBLIC_ACTIONS = ['createSession', 'submitLiffBooking', 'checkLiffAvailability', 'verifyAndUpsertMember', 'verifyLineToken', 'getBookingByToken', 'listPublicEquipment', 'getMyBookings', 'listPublicSchedule'];
 
 // ---------- ENTRY POINTS ----------
 
@@ -82,6 +82,7 @@ function handleRequest(e, method) {
       case 'getBookingByToken': result = getBookingByToken(params.token); break;
       case 'getMyBookings': result = getMyBookings(params.idToken, params); break;
       case 'listPublicSchedule': result = listPublicSchedule(params.month); break;
+      case 'checkLiffAvailability': result = checkLiffAvailability(params.date, params.startTime, params.endTime); break;
 
       // Customers
       case 'listCustomers': result = listCustomers(params); break;
@@ -641,6 +642,85 @@ function normalizePublicScheduleMonth_(month) {
 }
 
 
+// ตรวจคิวสำหรับหน้า LIFF โดยส่งกลับเฉพาะผลว่าง/ชน ไม่เปิดเผยชื่อลูกค้าหรือรายละเอียดงาน
+// การตรวจนี้เป็นเพียง UX ล่วงหน้า ส่วน submitLiffBooking จะตรวจซ้ำภายใต้ Script Lock ก่อนเขียนจริง
+function checkLiffAvailability(date, startTime, endTime) {
+  var schedule = normalizeLiffBookingSchedule_(date, startTime, endTime);
+  var conflict = checkConflicts({
+    date: schedule.date,
+    startTime: schedule.startTime,
+    endTime: schedule.endTime,
+    equipment: []
+  });
+
+  return {
+    available: !conflict.hasConflict,
+    hasConflict: !!conflict.hasConflict,
+    dateConflict: !!conflict.dateConflict,
+    message: conflict.hasConflict
+      ? buildLiffConflictMessage_(conflict)
+      : 'ยังไม่พบงานที่ชนกับวันที่และเวลานี้'
+  };
+}
+
+// ตรวจและทำรูปแบบวันที่/เวลาให้เป็นมาตรฐานก่อนรับคำขอจาก LIFF
+function normalizeLiffBookingSchedule_(date, startTime, endTime) {
+  var dateText = String(date || '').trim().substring(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateText)) {
+    throw new Error('วันที่จัดงานต้องอยู่ในรูปแบบ YYYY-MM-DD');
+  }
+
+  var parts = dateText.split('-').map(Number);
+  var parsedDate = new Date(parts[0], parts[1] - 1, parts[2]);
+  if (
+    parsedDate.getFullYear() !== parts[0] ||
+    parsedDate.getMonth() !== parts[1] - 1 ||
+    parsedDate.getDate() !== parts[2]
+  ) {
+    throw new Error('วันที่จัดงานไม่ถูกต้อง');
+  }
+
+  var timezone = Session.getScriptTimeZone() || 'Asia/Bangkok';
+  var todayText = Utilities.formatDate(new Date(), timezone, 'yyyy-MM-dd');
+  if (dateText < todayText) {
+    throw new Error('ไม่สามารถส่งคำขอจองวันที่ผ่านมาแล้วได้');
+  }
+
+  var start = normalizeLiffTime_(startTime, 'เวลาเริ่ม');
+  var end = normalizeLiffTime_(endTime, 'เวลาสิ้นสุด');
+  if ((start && !end) || (!start && end)) {
+    throw new Error('กรุณาระบุเวลาเริ่มและเวลาสิ้นสุดให้ครบ หรือเว้นว่างทั้งคู่');
+  }
+  if (start && end && start >= end) {
+    throw new Error('เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่ม');
+  }
+
+  return { date: dateText, startTime: start, endTime: end };
+}
+
+function normalizeLiffTime_(value, label) {
+  var text = String(value || '').trim();
+  if (!text) return '';
+  if (!/^\d{2}:\d{2}$/.test(text)) {
+    throw new Error(label + 'ต้องอยู่ในรูปแบบ HH:MM');
+  }
+
+  var parts = text.split(':').map(Number);
+  if (parts[0] > 23 || parts[1] > 59) {
+    throw new Error(label + 'ไม่ถูกต้อง');
+  }
+  return String(parts[0]).padStart(2, '0') + ':' + String(parts[1]).padStart(2, '0');
+}
+
+function buildLiffConflictMessage_(conflict) {
+  if (conflict && conflict.dateConflict) {
+    return 'วันที่หรือช่วงเวลานี้มีงานจองอยู่แล้ว กรุณาเลือกวันอื่น หรือระบุเวลาเริ่ม-สิ้นสุดให้ชัดเจนหากเป็นคนละช่วงเวลา';
+  }
+  if (conflict && conflict.equipmentConflicts && conflict.equipmentConflicts.length) {
+    return 'อุปกรณ์ของวงไม่ว่างตามวันที่/เวลาที่เลือก กรุณาเลือกวันอื่นหรือติดต่อทางวง';
+  }
+  return 'ข้อมูลการจองนี้ชนกับงานเดิม กรุณาตรวจสอบวันที่และเวลาอีกครั้ง';
+}
 function createBooking(data, actorId) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAMES.BOOKINGS);
   var id = genId();
@@ -1323,54 +1403,75 @@ function listAuditLog(params) {
 function submitLiffBooking(idToken, data) {
   if (!data || !data.date) throw new Error('กรุณาระบุวันที่จัดงาน');
 
+  var schedule = normalizeLiffBookingSchedule_(data.date, data.startTime, data.endTime);
   var profile = prepareLineProfile_(verifyLineIdToken(idToken)); // throws ถ้า token ไม่ถูกต้อง
   upsertMember(profile);
 
-  var customers = listCustomers({});
-  var existing = customers.find(function (c) { return c.memberId === profile.lineUserId; });
-  if (!existing && data.phone) {
-    existing = customers.find(function (c) { return c.phone && String(c.phone).trim() === String(data.phone).trim(); });
+  // ล็อกตั้งแต่ตรวจคิวจนถึงสร้างลูกค้า/การจอง เพื่อกันข้อมูลซ้ำจากคำขอที่เข้าพร้อมกัน
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) {
+    throw new Error('ระบบกำลังตรวจคำขอจองหลายรายการพร้อมกัน กรุณาลองใหม่อีกครั้ง');
   }
 
-  var customerId;
-  var customerName = (data.customerName || profile.displayName || '').trim();
+  var booking;
+  try {
+    var conflict = checkConflicts({
+      date: schedule.date,
+      startTime: schedule.startTime,
+      endTime: schedule.endTime,
+      equipment: []
+    });
+    if (conflict.hasConflict) {
+      throw new Error(buildLiffConflictMessage_(conflict));
+    }
 
-  if (existing) {
-    var updates = {};
-    if (!existing.memberId) updates.memberId = profile.lineUserId;
-    if (data.phone && data.phone !== existing.phone) updates.phone = data.phone;
-    if (customerName && customerName !== existing.name) updates.name = customerName;
-    if (Object.keys(updates).length) updateCustomer(existing.id, updates, profile.lineUserId);
-    customerId = existing.id;
-  } else {
-    var created = createCustomer({
-      name: customerName || 'ลูกค้า LINE',
+    var customers = listCustomers({});
+    var existing = customers.find(function (c) { return c.memberId === profile.lineUserId; });
+    if (!existing && data.phone) {
+      existing = customers.find(function (c) { return c.phone && String(c.phone).trim() === String(data.phone).trim(); });
+    }
+
+    var customerId;
+    var customerName = (data.customerName || profile.displayName || '').trim();
+    if (existing) {
+      var updates = {};
+      if (!existing.memberId) updates.memberId = profile.lineUserId;
+      if (data.phone && data.phone !== existing.phone) updates.phone = data.phone;
+      if (customerName && customerName !== existing.name) updates.name = customerName;
+      if (Object.keys(updates).length) updateCustomer(existing.id, updates, profile.lineUserId);
+      customerId = existing.id;
+    } else {
+      var created = createCustomer({
+        name: customerName || 'ลูกค้า LINE',
+        phone: data.phone || '',
+        line: profile.displayName || '',
+        memberId: profile.lineUserId
+      }, profile.lineUserId);
+      customerId = created.id;
+    }
+
+    booking = createBooking({
+      customerId: customerId,
+      customerName: customerName || 'ลูกค้า LINE',
       phone: data.phone || '',
       line: profile.displayName || '',
-      memberId: profile.lineUserId
+      venue: data.venue || '',
+      mapLink: data.mapLink || '',
+      province: data.province || '',
+      date: schedule.date,
+      startTime: schedule.startTime,
+      endTime: schedule.endTime,
+      jobType: data.jobType || 'Custom',
+      package: '',
+      price: 0,
+      deposit: 0,
+      remarks: data.remarks || '',
+      equipment: [],
+      status: 'pending' // งานที่ลูกค้าจองเองผ่าน LIFF ต้องรอแอดมินยืนยันและแจ้งราคา
     }, profile.lineUserId);
-    customerId = created.id;
+  } finally {
+    lock.releaseLock();
   }
-
-  var booking = createBooking({
-    customerId: customerId,
-    customerName: customerName || 'ลูกค้า LINE',
-    phone: data.phone || '',
-    line: profile.displayName || '',
-    venue: data.venue || '',
-    mapLink: data.mapLink || '',
-    province: data.province || '',
-    date: data.date,
-    startTime: data.startTime || '',
-    endTime: data.endTime || '',
-    jobType: data.jobType || 'Custom',
-    package: '',
-    price: 0,
-    deposit: 0,
-    remarks: data.remarks || '',
-    equipment: [],
-    status: 'pending' // งานที่ลูกค้าจองเองผ่าน LIFF ต้องรอแอดมินยืนยันและแจ้งราคา
-  }, profile.lineUserId);
 
   return { id: booking.id, bookingToken: booking.bookingToken, memberId: profile.lineUserId };
 }

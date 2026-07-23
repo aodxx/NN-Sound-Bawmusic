@@ -418,6 +418,7 @@ Session ปัจจุบันมีอายุ 21,600 วินาที ห
 - <code>submitLiffBooking</code>
 - <code>getMyBookings</code>
 - <code>listPublicSchedule</code>
+- <code>checkLiffAvailability</code>
 
 ### การเงินและประวัติ
 
@@ -591,6 +592,18 @@ LIFF ID ที่อยู่ในโค้ดปัจจุบัน:
 - ปฏิทินนี้ใช้เป็นตัวช่วยกรอกข้อมูล โดยแสดงงานที่ยืนยันแล้วเท่านั้น ทางวงยังต้องตรวจสอบคำขอและยืนยันจากหน้า Admin
 
 การเปิดใช้ระยะนี้ต้องใช้ API URL เดียวกันใน <code>js/api.js</code>, <code>liff/index.html</code> และ <code>liff/portal.html</code> เพื่อไม่ให้หน้าแสดงวันว่างจากฐานข้อมูลคนละชุด
+
+### ระยะ 2B: ตรวจชนคิวฝั่งเซิร์ฟเวอร์
+
+- หน้า LIFF เรียก <code>checkLiffAvailability</code> ก่อนส่งคำขอ เพื่อแจ้งผลจากข้อมูลล่าสุด
+- Backend ตรวจวันที่และเวลาอีกครั้งใน <code>submitLiffBooking</code> ก่อนเขียนลงชีต
+- ใช้ <code>LockService.getScriptLock()</code> ครอบขั้นตอนตรวจชนคิวและบันทึก เพื่อป้องกันคำขอที่เข้าพร้อมกันผ่านการตรวจทั้งคู่
+- งานสถานะ <code>pending</code> และ <code>confirmed</code> จะถูกนับเป็นคิวที่ต้องตรวจ ส่วน <code>cancelled</code> จะไม่ถือว่าชน
+- ถ้าไม่กรอกเวลา ระบบจะถือว่าชนกับงานในวันเดียวกันไว้ก่อน เพื่อไม่รับปากคิวที่ยังตรวจไม่ได้
+- ตรวจรูปแบบวันที่/เวลา ป้องกันวันที่ผ่านมาแล้ว เวลาไม่ครบคู่ และเวลาสิ้นสุดก่อนเวลาเริ่ม
+- Backend จะไม่ส่งชื่อลูกค้าหรือรายละเอียดงานเดิมกลับไปยัง Endpoint สาธารณะ
+
+หลัง Merge ต้องคัดลอก <code>code.gs</code> ฉบับเต็มจาก Repository ไปยัง Apps Script แล้ว Deploy Web App เป็นเวอร์ชันใหม่ เพราะ GitHub Pages ไม่อัปเดตโค้ด Apps Script ให้อัตโนมัติ
 
 ### Script Properties สำหรับ LINE
 
