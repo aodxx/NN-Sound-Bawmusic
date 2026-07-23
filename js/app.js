@@ -16,6 +16,12 @@ function app() {
     env: { isIOS: false, isAndroid: false, isInAppBrowser: false, inAppName: '' },
     deferredInstallPrompt: null,
     themeCheckInterval: null,
+    pendingBookingCount: 0,
+    pendingBookingReady: false,
+    pendingBookingTimer: null,
+    pendingBookingRequest: false,
+    pendingBookingFocusHandler: null,
+    pendingBookingVisibilityHandler: null,
     navItems: [
       { view: 'dashboard', icon: 'fa-house', label: 'หน้าหลัก' },
       { view: 'bookings', icon: 'fa-calendar-check', label: 'การจอง' },
@@ -101,6 +107,7 @@ function app() {
       // แสดงหน้าหลักทันที ไม่รอ getSettings เพราะถ้า Sheets/Apps Script ช้าจะทำให้ทั้งแอปเหมือนหน้าขาว
       this.loading = false;
       this.renderCurrentView();
+      this.startPendingBookingWatcher();
 
       // โหลดชื่อวง/ธีม/แบนเนอร์แบบเบื้องหลัง เมื่อได้ข้อมูลแล้ว Alpine จะอัปเดตหัวหน้าให้เอง
       BawmusicAPI.getSettings()
@@ -111,6 +118,53 @@ function app() {
           if (!BawmusicAPI.getSessionToken()) return;
           console.warn('Could not load settings — check API_URL in js/api.js', e);
         });
+    },
+
+    startPendingBookingWatcher() {
+      if (this.pendingBookingTimer) clearInterval(this.pendingBookingTimer);
+      this.refreshPendingBookingNotice(true);
+      this.pendingBookingTimer = setInterval(() => this.refreshPendingBookingNotice(false), 45 * 1000);
+
+      if (!this.pendingBookingFocusHandler) {
+        this.pendingBookingFocusHandler = () => this.refreshPendingBookingNotice(true);
+        window.addEventListener('focus', this.pendingBookingFocusHandler);
+      }
+      if (!this.pendingBookingVisibilityHandler) {
+        this.pendingBookingVisibilityHandler = () => {
+          if (document.visibilityState === 'visible') this.refreshPendingBookingNotice(true);
+        };
+        document.addEventListener('visibilitychange', this.pendingBookingVisibilityHandler);
+      }
+    },
+
+    async refreshPendingBookingNotice(force) {
+      if (!force && document.visibilityState === 'hidden') return;
+      if (this.pendingBookingRequest || !BawmusicAPI.getSessionToken()) return;
+
+      this.pendingBookingRequest = true;
+      try {
+        const list = await BawmusicAPI.listBookings({ status: 'pending' });
+        const count = Array.isArray(list) ? list.length : 0;
+        const previous = this.pendingBookingCount;
+        const wasReady = this.pendingBookingReady;
+        this.pendingBookingCount = count;
+        this.pendingBookingReady = true;
+
+        if (wasReady && count > previous && typeof Utils !== 'undefined' && Utils.toast) {
+          Utils.toast('info', 'มีคำขอจองใหม่ ' + (count - previous) + ' รายการ');
+        }
+      } catch (error) {
+        console.warn('Could not refresh pending booking notice:', error);
+      } finally {
+        this.pendingBookingRequest = false;
+      }
+    },
+
+    openPendingBookings() {
+      this.setView('bookings');
+      window.setTimeout(() => {
+        if (window.__openPendingBookings) window.__openPendingBookings();
+      }, 0);
     },
 
     ensureApiCompatibility() {
