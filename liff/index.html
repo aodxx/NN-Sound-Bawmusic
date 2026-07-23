@@ -203,6 +203,7 @@
 
     </div>
 
+    <p id="server-availability-status" class="hidden-init text-center text-sm mt-4" aria-live="polite"></p>
     <button id="btn-submit" onclick="submitBooking()"
       class="w-full mt-4 bg-gradient-to-r from-gold to-neon text-navy-dark text-base font-bold rounded-2xl py-4 shadow-lg shadow-gold/30 active:scale-[0.98] transition-transform">
       <i class="fa-solid fa-paper-plane mr-2"></i>ส่งคำขอจองคิว
@@ -569,6 +570,25 @@
     }
   }
 
+  function setServerAvailabilityStatus(message, tone) {
+    const element = document.getElementById('server-availability-status');
+    if (!element) return;
+    const colors = {
+      success: 'text-green-300',
+      error: 'text-red-300',
+      muted: 'text-gray-400'
+    };
+    element.className = 'text-center text-sm mt-4 ' + (colors[tone] || colors.muted);
+    element.textContent = message || '';
+    element.classList.remove('hidden-init');
+  }
+
+  function clearServerAvailabilityStatus() {
+    const element = document.getElementById('server-availability-status');
+    if (!element) return;
+    element.textContent = '';
+    element.classList.add('hidden-init');
+  }
   function escapeHtml(value) {
     return String(value || '').replace(/[&<>'"]/g, character => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
@@ -718,14 +738,29 @@
 
     const btn = document.getElementById('btn-submit');
     btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>กำลังส่ง...';
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>กำลังตรวจคิว...';
+    setServerAvailabilityStatus('กำลังตรวจสอบคิวล่าสุดจากระบบ...', 'muted');
 
     try {
+      const availability = await callApi('checkLiffAvailability', {
+        date: data.date,
+        startTime: data.startTime,
+        endTime: data.endTime
+      });
+
+      if (!availability || availability.hasConflict) {
+        throw new Error((availability && availability.message) || 'วันที่หรือเวลานี้มีงานจองอยู่แล้ว');
+      }
+
+      setServerAvailabilityStatus('ตรวจคิวล่าสุดแล้ว ยังไม่พบงานที่ชนกัน กำลังส่งคำขอ...', 'success');
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>กำลังส่งคำขอ...';
+
       const result = await callApi('submitLiffBooking', { idToken, data });
       document.getElementById('success-token').textContent = result.bookingToken || result.id;
       showScreen('screen-success');
     } catch (err) {
-      toast('error', 'ส่งคำขอไม่สำเร็จ: ' + err.message);
+      setServerAvailabilityStatus(err.message || 'ตรวจคิวไม่สำเร็จ กรุณาลองใหม่', 'error');
+      toast('error', 'ตรวจคิว/ส่งคำขอไม่สำเร็จ: ' + err.message);
       btn.disabled = false;
       btn.innerHTML = '<i class="fa-solid fa-paper-plane mr-2"></i>ส่งคำขอจองคิว';
     }
@@ -781,6 +816,9 @@
       applyInitialBookingDate();
       document.getElementById('field-mapLink').addEventListener('input', handleMapLinkInput);
       document.getElementById('field-date').addEventListener('change', handleDateChange);
+      ['field-date', 'field-startTime', 'field-endTime'].forEach(function (id) {
+        document.getElementById(id).addEventListener('input', clearServerAvailabilityStatus);
+      });
       document.getElementById('availability-prev').onclick = function () { changeAvailabilityMonth(-1); };
       document.getElementById('availability-next').onclick = function () { changeAvailabilityMonth(1); };
       document.getElementById('btn-check-availability').onclick = function () {
