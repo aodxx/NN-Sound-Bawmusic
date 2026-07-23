@@ -41,6 +41,7 @@ function paintBookingsRoot() {
         <i class="fa-solid fa-list mr-1.5"></i>รายการ
       </button>
     </div>
+    ${pendingBookingsNotice()}
     <div id="bookings-view-content"></div>
   `;
   Utils.fadeIn(container);
@@ -48,6 +49,27 @@ function paintBookingsRoot() {
   if (__bookingsViewMode === 'calendar') paintCalendarView();
   else paintBookingsListView();
 }
+
+function pendingBookingsNotice() {
+  const count = __bookingsCache.filter(function (booking) { return booking.status === 'pending'; }).length;
+  if (!count) return '';
+  return `
+    <button type="button" onclick="window.__openPendingBookings()" class="mb-3 flex w-full items-center gap-3 rounded-2xl border border-rose-400/30 bg-rose-400/10 px-4 py-3 text-left text-rose-200">
+      <span class="pending-notification-dot shrink-0"></span>
+      <span class="min-w-0 flex-1">
+        <span class="block text-sm font-semibold">มีคำขอจองรอยืนยัน ${count} รายการ</span>
+        <span class="block text-xs text-rose-200/70">แตะเพื่อเปิดรายการที่ต้องตรวจสอบ</span>
+      </span>
+      <i class="fa-solid fa-chevron-right text-xs"></i>
+    </button>
+  `;
+}
+
+window.__openPendingBookings = () => {
+  __bookingsFilter.status = 'pending';
+  __bookingsViewMode = 'list';
+  paintBookingsRoot();
+};
 
 window.__setBookingsView = (mode) => {
   __bookingsViewMode = mode;
@@ -123,6 +145,7 @@ function paintCalendarView() {
 
 function calendarCell(day, dayBookings, isToday, year, month) {
   const has = dayBookings.length > 0;
+  const hasPending = dayBookings.some(function (booking) { return booking.status === 'pending'; });
   const firstName = has ? (dayBookings[0].customerName || '').split(' ')[0] : '';
 
   return `
@@ -130,7 +153,7 @@ function calendarCell(day, dayBookings, isToday, year, month) {
       class="relative aspect-square rounded-xl flex flex-col items-center justify-start pt-1.5 gap-0.5 transition-colors
         ${isToday ? 'ring-2 ring-gold' : ''}
         ${has ? 'bg-gold/10' : 'bg-navy hover:bg-navy-light'}">
-      ${has ? `<span class="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-gold pulse-dot"></span>` : ''}
+      ${has ? `<span class="absolute top-1 right-1 w-2.5 h-2.5 rounded-full ${hasPending ? 'bg-rose-400 pending-calendar-dot' : 'bg-gold pulse-dot'}"></span>` : ''}
       <span class="text-base font-semibold ${isToday ? 'text-gold font-bold' : 'text-gray-300'}">${day}</span>
       ${has ? `<span class="text-xs text-gold/90 leading-tight truncate w-full px-1 font-medium">${firstName}</span>` : ''}
       ${dayBookings.length > 1 ? `<span class="text-xs text-gray-500 leading-none">+${dayBookings.length - 1}</span>` : ''}
@@ -234,7 +257,7 @@ window.__setBookingFilter = (key, value) => {
 
 function bookingRow(b) {
   return `
-    <div class="bg-navy-light rounded-2xl p-3.5 border border-gold/10 shadow-sm shadow-black/5 active:scale-[0.98] transition-transform cursor-pointer"
+    <div class="bg-navy-light rounded-2xl p-3.5 border ${b.status === 'pending' ? 'border-rose-400/40 pending-booking-row' : 'border-gold/10'} shadow-sm shadow-black/5 active:scale-[0.98] transition-transform cursor-pointer"
          onclick="window.openBookingForm('${b.id}')">
       <div class="flex items-start justify-between mb-1.5">
         <div class="flex items-center gap-2">
@@ -243,6 +266,7 @@ function bookingRow(b) {
         </div>
         ${Utils.statusBadge(b.status)}
       </div>
+      ${b.status === 'pending' ? '<p class="pending-booking-label mb-1"><i class="fa-solid fa-bell mr-1"></i>คำขอใหม่ · รอแอดมินยืนยัน</p>' : ''}
       <p class="text-base text-gray-400 mb-1"><i class="fa-solid fa-location-dot mr-1 w-3"></i>${b.venue || 'ไม่ระบุสถานที่'} ${b.province ? '· ' + b.province : ''}</p>
       <div class="flex items-center justify-between mt-2 text-base">
         <span class="text-gray-400"><i class="fa-regular fa-calendar mr-1 w-3"></i>${Utils.formatDate(b.date)}</span>
