@@ -671,3 +671,26 @@ button, [onclick] { touch-action: manipulation; }
 [data-theme="light"] .dashboard-payment-panel {
   background: linear-gradient(145deg, rgba(192,38,211,.07), #fff 48%);
   border-color: rgba(192,38,211,.14);
+
+
+/* PR #41 — แจ้งเตือนคำขอจองใหม่แบบเห็นได้ชัดและไม่รบกวนเกินไป */
+@keyframes bawmusic-pending-blink {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .35; transform: scale(.82); }
+}
+.pending-notification-dot {
+  display: inline-block; width: .6rem; height: .6rem; border-radius: 9999px;
+  background: #fb7185; box-shadow: 0 0 0 .18rem rgba(251, 113, 133, .18), 0 0 .7rem rgba(251, 113, 133, .65);
+  animation: bawmusic-pending-blink 1.2s ease-in-out infinite;
+}
+.pending-calendar-dot { animation: bawmusic-pending-blink 1.2s ease-in-out infinite; box-shadow: 0 0 .55rem rgba(251, 113, 133, .7); }
+.pending-notification-badge {
+  min-width: 1.15rem; height: 1.15rem; display: inline-flex; align-items: center; justify-content: center;
+  padding: 0 .25rem; border-radius: 9999px; background: #fb7185; color: #fff; font-size: .62rem; line-height: 1;
+  font-weight: 700; box-shadow: 0 2px 8px rgba(251, 113, 133, .35);
+}
+.pending-booking-row { box-shadow: 0 0 0 1px rgba(251, 113, 133, .08), 0 12px 28px rgba(244, 63, 94, .08); }
+.pending-booking-label { color: #fda4af; font-size: .76rem; font-weight: 600; }
+@media (prefers-reduced-motion: reduce) {
+  .pending-notification-dot, .pending-calendar-dot, .pending-notification-badge { animation: none; }
+}

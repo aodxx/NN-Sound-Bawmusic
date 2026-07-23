@@ -82,7 +82,7 @@ function handleRequest(e, method) {
       case 'getBookingByToken': result = getBookingByToken(params.token); break;
       case 'getMyBookings': result = getMyBookings(params.idToken, params); break;
       case 'listPublicSchedule': result = listPublicSchedule(params.month); break;
-      case 'checkLiffAvailability': result = checkLiffAvailability(params.date, params.startTime, params.endTime); break;
+      case 'checkLiffAvailability': result = checkLiffAvailability(params.date, params.startTime, params.endTime, params.equipment); break;
 
       // Customers
       case 'listCustomers': result = listCustomers(params); break;
@@ -644,13 +644,14 @@ function normalizePublicScheduleMonth_(month) {
 
 // ตรวจคิวสำหรับหน้า LIFF โดยส่งกลับเฉพาะผลว่าง/ชน ไม่เปิดเผยชื่อลูกค้าหรือรายละเอียดงาน
 // การตรวจนี้เป็นเพียง UX ล่วงหน้า ส่วน submitLiffBooking จะตรวจซ้ำภายใต้ Script Lock ก่อนเขียนจริง
-function checkLiffAvailability(date, startTime, endTime) {
+function checkLiffAvailability(date, startTime, endTime, equipment) {
   var schedule = normalizeLiffBookingSchedule_(date, startTime, endTime);
+  var requestedEquipment = normalizeLiffEquipment_(equipment);
   var conflict = checkConflicts({
     date: schedule.date,
     startTime: schedule.startTime,
     endTime: schedule.endTime,
-    equipment: []
+    equipment: requestedEquipment
   });
 
   return {
@@ -664,6 +665,65 @@ function checkLiffAvailability(date, startTime, endTime) {
 }
 
 // ตรวจและทำรูปแบบวันที่/เวลาให้เป็นมาตรฐานก่อนรับคำขอจาก LIFF
+// ตรวจสอบและทำมาตรฐานรายการอุปกรณ์จาก LIFF ก่อนนำไปเช็กคิวหรือบันทึก
+// ใช้ id จากชีตเป็นหลัก และไม่เชื่อชื่อ/จำนวนที่ส่งมาจากฝั่งลูกค้าโดยตรง
+function normalizeLiffEquipment_(items) {
+  if (!Array.isArray(items) || !items.length) return [];
+
+  var equipmentList = listEquipment();
+  var normalized = {};
+
+  items.forEach(function (item) {
+    item = item || {};
+    var itemId = String(item.id || '').trim();
+    var itemName = String(item.name || '').trim();
+    var requestedQty = item.qty === undefined || item.qty === '' ? 1 : Number(item.qty);
+
+    if (!itemId && !itemName) throw new Error('พบรายการอุปกรณ์ที่ไม่มีรหัสหรือชื่อ');
+    if (!isFinite(requestedQty) || requestedQty < 1 || Math.floor(requestedQty) !== requestedQty) {
+      throw new Error('จำนวนอุปกรณ์ต้องเป็นจำนวนเต็มมากกว่า 0');
+    }
+
+    var stock = equipmentList.find(function (entry) {
+      return (itemId && String(entry.id || '') === itemId) ||
+        (!itemId && itemName && String(entry.name || '') === itemName);
+    });
+    if (!stock || !stock.name) {
+      throw new Error('ไม่พบอุปกรณ์ที่เลือกในคลัง: ' + (itemName || itemId));
+    }
+
+    var availableQty = Number(stock.availableQty);
+    if (!isFinite(availableQty) || availableQty < 1) {
+      throw new Error('อุปกรณ์ "' + stock.name + '" ยังไม่ได้ระบุจำนวนพร้อมใช้งาน');
+    }
+
+    var key = String(stock.id || stock.name);
+    if (!normalized[key]) {
+      normalized[key] = {
+        id: stock.id || '',
+        name: stock.name,
+        unit: stock.unit || '',
+        qty: 0,
+        availableQty: Math.floor(availableQty)
+      };
+    }
+    normalized[key].qty += requestedQty;
+  });
+
+  return Object.keys(normalized).map(function (key) {
+    var item = normalized[key];
+    if (item.qty > item.availableQty) {
+      throw new Error('อุปกรณ์ "' + item.name + '" มีจำนวนพร้อมใช้งาน ' + item.availableQty + ' ' + (item.unit || 'ชิ้น') + ' แต่เลือก ' + item.qty + ' ' + (item.unit || 'ชิ้น'));
+    }
+    return {
+      id: item.id,
+      name: item.name,
+      unit: item.unit,
+      qty: item.qty
+    };
+  });
+}
+
 function normalizeLiffBookingSchedule_(date, startTime, endTime) {
   var dateText = String(date || '').trim().substring(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateText)) {
@@ -853,6 +913,7 @@ function listPublicEquipment() {
       name: e.name,
       category: e.category || '',
       unit: e.unit || '',
+      availableQty: Math.max(0, Math.floor(Number(e.availableQty) || 0)),
       imageUrl: e.imageUrl || ''
     };
   });
@@ -1222,7 +1283,8 @@ function verifyLineIdToken(idToken) {
     lineUserId: result.sub,
     displayName: result.name || '',
     pictureUrl: result.picture || '',
-    email: result.email || ''
+    email: result.email || '',
+    phone: result.phone || ''
   };
 }
 
@@ -1264,7 +1326,12 @@ function prepareLineProfile_(profile) {
 // ใช้จากหน้า LIFF: verify token แล้วบันทึก/อัปเดต Member ในขั้นตอนเดียว
 function verifyAndUpsertMember(idToken) {
   var profile = prepareLineProfile_(verifyLineIdToken(idToken));
-  return upsertMember(profile);
+  var member = upsertMember(profile);
+  var customer = listCustomers({}).find(function (c) {
+    return c.memberId && c.memberId === profile.lineUserId;
+  });
+  member.phone = profile.phone || (customer && customer.phone) || '';
+  return member;
 }
 
 // ---------- PAYMENTS ----------
@@ -1407,6 +1474,8 @@ function submitLiffBooking(idToken, data) {
   var profile = prepareLineProfile_(verifyLineIdToken(idToken)); // throws ถ้า token ไม่ถูกต้อง
   upsertMember(profile);
 
+  var requestedPhone = String(profile.phone || data.phone || '').trim();
+
   // ล็อกตั้งแต่ตรวจคิวจนถึงสร้างลูกค้า/การจอง เพื่อกันข้อมูลซ้ำจากคำขอที่เข้าพร้อมกัน
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(10000)) {
@@ -1415,11 +1484,12 @@ function submitLiffBooking(idToken, data) {
 
   var booking;
   try {
+    var requestedEquipment = normalizeLiffEquipment_(data.equipment);
     var conflict = checkConflicts({
       date: schedule.date,
       startTime: schedule.startTime,
       endTime: schedule.endTime,
-      equipment: []
+      equipment: requestedEquipment
     });
     if (conflict.hasConflict) {
       throw new Error(buildLiffConflictMessage_(conflict));
@@ -1427,8 +1497,8 @@ function submitLiffBooking(idToken, data) {
 
     var customers = listCustomers({});
     var existing = customers.find(function (c) { return c.memberId === profile.lineUserId; });
-    if (!existing && data.phone) {
-      existing = customers.find(function (c) { return c.phone && String(c.phone).trim() === String(data.phone).trim(); });
+    if (!existing && requestedPhone) {
+      existing = customers.find(function (c) { return c.phone && String(c.phone).trim() === requestedPhone; });
     }
 
     var customerId;
@@ -1436,14 +1506,14 @@ function submitLiffBooking(idToken, data) {
     if (existing) {
       var updates = {};
       if (!existing.memberId) updates.memberId = profile.lineUserId;
-      if (data.phone && data.phone !== existing.phone) updates.phone = data.phone;
+      if (requestedPhone && requestedPhone !== existing.phone) updates.phone = requestedPhone;
       if (customerName && customerName !== existing.name) updates.name = customerName;
       if (Object.keys(updates).length) updateCustomer(existing.id, updates, profile.lineUserId);
       customerId = existing.id;
     } else {
       var created = createCustomer({
         name: customerName || 'ลูกค้า LINE',
-        phone: data.phone || '',
+        phone: requestedPhone || '',
         line: profile.displayName || '',
         memberId: profile.lineUserId
       }, profile.lineUserId);
@@ -1453,7 +1523,7 @@ function submitLiffBooking(idToken, data) {
     booking = createBooking({
       customerId: customerId,
       customerName: customerName || 'ลูกค้า LINE',
-      phone: data.phone || '',
+      phone: requestedPhone || (existing && existing.phone) || '',
       line: profile.displayName || '',
       venue: data.venue || '',
       mapLink: data.mapLink || '',
@@ -1466,7 +1536,7 @@ function submitLiffBooking(idToken, data) {
       price: 0,
       deposit: 0,
       remarks: data.remarks || '',
-      equipment: [],
+      equipment: requestedEquipment,
       status: 'pending' // งานที่ลูกค้าจองเองผ่าน LIFF ต้องรอแอดมินยืนยันและแจ้งราคา
     }, profile.lineUserId);
   } finally {
