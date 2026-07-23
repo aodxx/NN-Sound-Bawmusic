@@ -44,6 +44,22 @@
     background: #08080d !important; border: 1px solid rgba(34,211,238,0.25) !important;
     color: #fff !important; border-radius: 0.5rem !important; font-family: 'Kanit', sans-serif !important;
   }
+  .availability-day {
+    min-height: 3.15rem; padding: .35rem .15rem; border: 1px solid rgba(34,211,238,.12);
+    border-radius: .7rem; color: #9ca3af; background: #13131f; font-size: .78rem;
+    line-height: 1.1; transition: transform .15s ease, border-color .15s ease, background .15s ease;
+  }
+  .availability-day.available { border-color: rgba(74,222,128,.35); color: #bbf7d0; background: rgba(74,222,128,.08); }
+  .availability-day.available:active { transform: scale(.96); }
+  .availability-day.selected { border-color: #22d3ee; color: #cffafe; background: rgba(34,211,238,.2); box-shadow: 0 0 0 1px rgba(34,211,238,.2); }
+  .availability-day.booked { border-color: rgba(246,55,236,.32); color: #f5d0fe; background: rgba(246,55,236,.1); cursor: not-allowed; }
+  .availability-day.past { opacity: .4; cursor: not-allowed; }
+  .availability-day small { display: block; margin-top: .25rem; color: inherit; font-size: .58rem; opacity: .8; }
+  .availability-month-button {
+    display: grid; place-items: center; width: 2rem; height: 2rem;
+    border: 1px solid rgba(34,211,238,.16); border-radius: .65rem;
+    color: #67e8f9; background: #13131f;
+  }
 </style>
 </head>
 <body class="font-kanit bg-navy-dark text-gray-100 min-h-screen">
@@ -91,8 +107,22 @@
 
       <div>
         <label class="text-sm text-gray-500 block mb-1">สถานที่จัดงาน</label>
-        <input id="field-venue" type="text" placeholder="ชื่อสถานที่ / ที่อยู่โดยย่อ"
+        <input id="field-venue" type="text" autocomplete="street-address" placeholder="ชื่อสถานที่ / ที่อยู่โดยย่อ"
           class="w-full bg-navy border border-gold/10 rounded-lg px-3 py-3 text-base text-gray-100 focus:outline-none focus:border-gold/40">
+        <p class="text-xs text-gray-500 mt-1.5">พิมพ์ชื่อสถานที่หรือที่อยู่ได้ตามปกติ แล้วเลือกแนบพิกัดเพื่อให้ทางวงเดินทางได้ง่ายขึ้น</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+          <button id="btn-use-location" type="button" onclick="useCurrentLocation()"
+            class="rounded-lg border border-gold/20 bg-gold/10 px-3 py-2.5 text-sm font-medium text-gold active:scale-[0.98] transition-transform">
+            <i class="fa-solid fa-location-crosshairs mr-1.5"></i>ใช้ตำแหน่งปัจจุบัน
+          </button>
+          <input id="field-mapLink" type="url" autocomplete="url" placeholder="วางลิงก์ Google Maps (ถ้ามี)"
+            class="w-full bg-navy border border-gold/10 rounded-lg px-3 py-2.5 text-sm text-gray-100 focus:outline-none focus:border-gold/40">
+        </div>
+        <p id="location-status" class="mt-2 text-xs text-gray-500" aria-live="polite">ยังไม่ได้แนบพิกัด — เป็นตัวเลือกเสริม</p>
+        <a id="location-map-link" href="#" target="_blank" rel="noopener noreferrer"
+          class="hidden-init mt-2 inline-flex items-center gap-1 text-xs text-gold underline">
+          <i class="fa-solid fa-map-location-dot"></i>เปิดพิกัดใน Google Maps
+        </a>
       </div>
 
       <div>
@@ -102,11 +132,40 @@
         </select>
       </div>
 
-      <div>
-        <label class="text-sm text-gray-500 block mb-1">วันที่จัดงาน</label>
+      <section class="border-t border-gold/10 pt-4">
+        <div class="flex items-start justify-between gap-3 mb-1">
+          <div>
+            <label class="text-sm text-gray-500 block">วันที่จัดงาน</label>
+            <p class="text-xs text-gray-500 mt-1">แตะวันที่ว่างในปฏิทินเพื่อเติมวันที่ให้อัตโนมัติ</p>
+          </div>
+          <button id="btn-check-availability" type="button"
+            class="shrink-0 rounded-lg border border-gold/20 bg-gold/10 px-2.5 py-2 text-xs font-medium text-gold active:scale-[0.98] transition-transform">
+            <i class="fa-solid fa-rotate-right mr-1"></i>ตรวจวันว่าง
+          </button>
+        </div>
         <input id="field-date" type="date"
           class="w-full bg-navy border border-gold/10 rounded-lg px-3 py-3 text-base text-gray-100 focus:outline-none focus:border-gold/40">
-      </div>
+        <div id="availability-panel" class="mt-3 rounded-xl border border-gold/10 bg-navy/60 p-3">
+          <div class="flex items-center justify-between gap-2">
+            <button id="availability-prev" type="button" class="availability-month-button" aria-label="เดือนก่อนหน้า">
+              <i class="fa-solid fa-chevron-left"></i>
+            </button>
+            <strong id="availability-month-label" class="text-sm text-gray-200">กำลังโหลด</strong>
+            <button id="availability-next" type="button" class="availability-month-button" aria-label="เดือนถัดไป">
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
+          </div>
+          <div id="availability-state" class="py-4 text-center text-xs text-gray-500" aria-live="polite">
+            กำลังโหลดวันว่าง...
+          </div>
+          <div id="availability-calendar" class="hidden-init grid grid-cols-7 gap-1.5 mt-2" aria-label="ปฏิทินวันว่าง"></div>
+          <div class="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-gray-500">
+            <span><i class="fa-solid fa-circle text-green-300 mr-1"></i>เลือกจองได้</span>
+            <span><i class="fa-solid fa-circle text-fuchsia-300 mr-1"></i>มีงานยืนยันแล้ว</span>
+          </div>
+          <p class="mt-2 text-[11px] leading-relaxed text-gray-500">ข้อมูลนี้แสดงงานที่ยืนยันแล้วเท่านั้น ทางวงจะตรวจสอบคิวอีกครั้งหลังส่งคำขอ</p>
+        </div>
+      </section>
 
       <div class="grid grid-cols-2 gap-3">
         <div>
@@ -171,7 +230,8 @@
 
 <script>
   // ⚠️ แก้ URL นี้เป็น Web App URL เดียวกับที่ใช้ใน js/api.js ของแอปแอดมิน
-  const API_URL = 'https://script.google.com/macros/s/AKfycbykgZIfxTQ3652WNWaES0ZPWubbv62IlXYqgar27u-S8a0nNZ8yiinFj_BZd8Dg1ow5/exec';
+  // ใช้ Web App deployment เดียวกับ js/api.js และ Customer Portal เพื่อให้ตารางวันว่างตรงกับฐานข้อมูลหลัก
+  const API_URL = 'https://script.google.com/macros/s/AKfycbwczdEBiHu3bECE1OeeOzMKcIpB7Ed8oLAD0O3DbjDeuFM5drKH0JW_aJtN_Y2uYfXDBA/exec';
 
   // LIFF ID ของ Bawmusic (จาก LINE Developers Console)
   const LIFF_ID = '2007938843-WTd19n2O';
@@ -194,6 +254,8 @@
   let selectedJobType = 'Wedding';
   let idToken = null;
   let liffProfile = null;
+  let availabilityMonth = '';
+  const availabilityCache = {};
 
   function showScreen(id) {
     ['screen-loading', 'screen-error', 'screen-form', 'screen-success'].forEach(s => {
@@ -211,6 +273,300 @@
       toast: true, position: 'top', showConfirmButton: false, timer: 2200, timerProgressBar: true,
       background: '#13131f', color: '#fff'
     }).fire({ icon, title });
+  }
+
+  function localDateKey(date) {
+    const value = date || new Date();
+    return value.getFullYear() + '-' + String(value.getMonth() + 1).padStart(2, '0') + '-' + String(value.getDate()).padStart(2, '0');
+  }
+
+  function monthKeyFromDateKey(value) {
+    return String(value || '').substring(0, 7);
+  }
+
+  function isValidDateKey(value) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))) return false;
+    const parts = String(value).split('-').map(Number);
+    const date = new Date(parts[0], parts[1] - 1, parts[2]);
+    return date.getFullYear() === parts[0] && date.getMonth() === parts[1] - 1 && date.getDate() === parts[2];
+  }
+
+  function formatMonthLabel(value) {
+    const parts = String(value || '').split('-').map(Number);
+    if (parts.length !== 2 || !parts[0] || !parts[1]) return value || '';
+    return new Date(parts[0], parts[1] - 1, 1).toLocaleDateString('th-TH', {
+      month: 'long',
+      year: 'numeric'
+    });
+  }
+
+  function getPageParam(name) {
+    const direct = new URLSearchParams(window.location.search).get(name);
+    if (direct) return direct;
+    if (window.liff && liff.state) {
+      const stateText = String(liff.state);
+      const question = stateText.indexOf('?');
+      if (question !== -1) {
+        return new URLSearchParams(stateText.substring(question + 1)).get(name) || '';
+      }
+    }
+    return '';
+  }
+
+  function setLocationStatus(message, tone) {
+    const element = document.getElementById('location-status');
+    if (!element) return;
+    const colors = {
+      success: 'text-green-300',
+      error: 'text-red-300',
+      warning: 'text-yellow-300',
+      muted: 'text-gray-500'
+    };
+    element.className = 'mt-2 text-xs ' + (colors[tone] || colors.muted);
+    element.textContent = message;
+  }
+
+  function setLocationMapLink(url) {
+    const link = document.getElementById('location-map-link');
+    if (!link) return;
+    if (url) {
+      link.href = url;
+      link.classList.remove('hidden-init');
+    } else {
+      link.href = '#';
+      link.classList.add('hidden-init');
+    }
+  }
+
+  function normalizeMapLink(value) {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    if (!/^https?:\/\//i.test(text)) throw new Error('ลิงก์แผนที่ต้องขึ้นต้นด้วย https://');
+    return text;
+  }
+
+  function setLocationBusy(isBusy) {
+    const button = document.getElementById('btn-use-location');
+    if (!button) return;
+    button.disabled = isBusy;
+    button.innerHTML = isBusy
+      ? '<i class="fa-solid fa-spinner fa-spin mr-1.5"></i>กำลังขอตำแหน่ง...'
+      : '<i class="fa-solid fa-location-crosshairs mr-1.5"></i>ใช้ตำแหน่งปัจจุบัน';
+  }
+
+  function useCurrentLocation() {
+    if (!window.isSecureContext) {
+      setLocationStatus('ต้องเปิดผ่าน HTTPS จึงจะขอตำแหน่งได้', 'error');
+      return;
+    }
+    if (!navigator.geolocation) {
+      setLocationStatus('เบราว์เซอร์นี้ไม่รองรับการอ่านตำแหน่ง กรุณาวางลิงก์ Google Maps แทน', 'error');
+      return;
+    }
+
+    setLocationBusy(true);
+    setLocationStatus('กำลังขออนุญาตอ่านตำแหน่งจากอุปกรณ์...', 'muted');
+    navigator.geolocation.getCurrentPosition(function (position) {
+      const latitude = Number(position.coords.latitude).toFixed(6);
+      const longitude = Number(position.coords.longitude).toFixed(6);
+      const mapUrl = 'https://www.google.com/maps?q=' + latitude + ',' + longitude;
+      const accuracy = position.coords.accuracy ? Math.round(position.coords.accuracy) : null;
+      document.getElementById('field-mapLink').value = mapUrl;
+      setLocationMapLink(mapUrl);
+      setLocationStatus(
+        'แนบพิกัดแล้ว (' + latitude + ', ' + longitude + ')' + (accuracy ? ' · คลาดเคลื่อนประมาณ ' + accuracy + ' ม.' : ''),
+        'success'
+      );
+      setLocationBusy(false);
+    }, function (error) {
+      const messages = {
+        1: 'ไม่ได้รับอนุญาตให้อ่านตำแหน่ง กรุณาเปิดสิทธิ์ Location หรือวางลิงก์ Google Maps แทน',
+        2: 'ไม่สามารถระบุตำแหน่งได้ในขณะนี้ กรุณาลองใหม่หรือวางลิงก์ Google Maps',
+        3: 'การขอตำแหน่งใช้เวลานานเกินไป กรุณาลองใหม่'
+      };
+      setLocationStatus(messages[error.code] || 'อ่านตำแหน่งไม่สำเร็จ กรุณาวางลิงก์ Google Maps แทน', 'error');
+      setLocationBusy(false);
+    }, {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 300000
+    });
+  }
+
+  function handleMapLinkInput() {
+    const value = document.getElementById('field-mapLink').value.trim();
+    if (!value) {
+      setLocationMapLink('');
+      setLocationStatus('ยังไม่ได้แนบพิกัด — เป็นตัวเลือกเสริม', 'muted');
+      return;
+    }
+    if (!/^https?:\/\//i.test(value)) {
+      setLocationMapLink('');
+      setLocationStatus('ลิงก์แผนที่ควรขึ้นต้นด้วย https://', 'warning');
+      return;
+    }
+    setLocationMapLink(value);
+    setLocationStatus('แนบลิงก์แผนที่แล้ว', 'success');
+  }
+
+  function setAvailabilityStatus(message, tone) {
+    const element = document.getElementById('availability-state');
+    const calendar = document.getElementById('availability-calendar');
+    if (!element || !calendar) return;
+    const colors = {
+      success: 'text-green-300',
+      error: 'text-red-300',
+      warning: 'text-yellow-300',
+      muted: 'text-gray-500'
+    };
+    element.className = 'py-4 text-center text-xs ' + (colors[tone] || colors.muted);
+    element.textContent = message;
+  }
+
+  function setAvailabilityLoading(loading) {
+    const button = document.getElementById('btn-check-availability');
+    const calendar = document.getElementById('availability-calendar');
+    if (button) {
+      button.disabled = loading;
+      button.innerHTML = loading
+        ? '<i class="fa-solid fa-spinner fa-spin mr-1"></i>กำลังโหลด'
+        : '<i class="fa-solid fa-rotate-right mr-1"></i>ตรวจวันว่าง';
+    }
+    if (calendar && loading) calendar.classList.add('hidden-init');
+  }
+
+  function renderAvailabilityCalendar(month, bookedDates) {
+    const calendar = document.getElementById('availability-calendar');
+    const monthLabel = document.getElementById('availability-month-label');
+    if (!calendar || !monthLabel) return;
+
+    const parts = String(month).split('-').map(Number);
+    const year = parts[0];
+    const monthNumber = parts[1];
+    const firstDay = new Date(year, monthNumber - 1, 1).getDay();
+    const dayCount = new Date(year, monthNumber, 0).getDate();
+    const todayKey = localDateKey();
+    const selectedDate = document.getElementById('field-date').value;
+    const booked = {};
+    (bookedDates || []).forEach(function (date) {
+      booked[String(date).substring(0, 10)] = true;
+    });
+
+    monthLabel.textContent = formatMonthLabel(month);
+    let html = '';
+    for (let blank = 0; blank < firstDay; blank++) {
+      html += '<div aria-hidden="true"></div>';
+    }
+    for (let day = 1; day <= dayCount; day++) {
+      const key = year + '-' + String(monthNumber).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+      const isPast = key < todayKey;
+      const isBooked = !!booked[key];
+      const isSelected = key === selectedDate;
+      let classes = 'availability-day';
+      let note = '';
+      if (isBooked) {
+        classes += ' booked';
+        note = 'มีงาน';
+      } else if (isPast) {
+        classes += ' past';
+        note = 'ผ่านแล้ว';
+      } else {
+        classes += ' available';
+        note = 'เลือกได้';
+      }
+      if (isSelected) classes += ' selected';
+      const label = formatMonthLabel(month) + ' วันที่ ' + day + (isBooked ? ' มีงานยืนยันแล้ว' : (isPast ? ' ผ่านแล้ว' : ' เลือกจองได้'));
+      if (isBooked || isPast) {
+        html += '<button type="button" class="' + classes + '" disabled aria-label="' + escapeHtml(label) + '"><span>' + day + '</span><small>' + note + '</small></button>';
+      } else {
+        html += '<button type="button" class="' + classes + '" onclick="selectAvailableDate(\'' + key + '\')" aria-label="' + escapeHtml(label) + '"><span>' + day + '</span><small>' + note + '</small></button>';
+      }
+    }
+    calendar.innerHTML = html;
+    calendar.classList.remove('hidden-init');
+
+    if (selectedDate && booked[selectedDate]) {
+      document.getElementById('field-date').value = '';
+      setAvailabilityStatus('วันที่ที่เลือกมีงานยืนยันแล้ว กรุณาเลือกวันอื่น', 'error');
+    }
+  }
+
+  async function loadAvailabilityMonth(month, force) {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(month || ''))) return;
+    availabilityMonth = month;
+    if (availabilityCache[month] && !force) {
+      renderAvailabilityCalendar(month, availabilityCache[month].bookedDates || []);
+      setAvailabilityStatus('เลือกวันที่เป็นสีเขียวได้เลย', 'success');
+      return;
+    }
+
+    setAvailabilityLoading(true);
+    setAvailabilityStatus('กำลังตรวจสอบวันว่าง...', 'muted');
+    try {
+      const data = await callApi('listPublicSchedule', { month: month }, 'GET');
+      availabilityCache[month] = data || { month: month, bookedDates: [] };
+      renderAvailabilityCalendar(month, availabilityCache[month].bookedDates || []);
+      setAvailabilityStatus('เลือกวันที่เป็นสีเขียวได้เลย', 'success');
+    } catch (error) {
+      const calendar = document.getElementById('availability-calendar');
+      if (calendar) calendar.classList.add('hidden-init');
+      setAvailabilityStatus('ตรวจวันว่างไม่สำเร็จ — ยังเลือกวันจากช่องวันที่ได้ (' + (error.message || 'ลองใหม่อีกครั้ง') + ')', 'warning');
+    } finally {
+      setAvailabilityLoading(false);
+    }
+  }
+
+  function selectAvailableDate(date) {
+    if (!isValidDateKey(date) || date < localDateKey()) return;
+    const data = availabilityCache[monthKeyFromDateKey(date)];
+    if (data && (data.bookedDates || []).map(function (value) {
+      return String(value).substring(0, 10);
+    }).indexOf(date) !== -1) {
+      setAvailabilityStatus('วันที่นี้มีงานยืนยันแล้ว กรุณาเลือกวันอื่น', 'error');
+      return;
+    }
+    document.getElementById('field-date').value = date;
+    availabilityMonth = monthKeyFromDateKey(date);
+    renderAvailabilityCalendar(availabilityMonth, data ? data.bookedDates : []);
+    setAvailabilityStatus('เลือกวันที่ ' + date + ' แล้ว', 'success');
+  }
+
+  function changeAvailabilityMonth(delta) {
+    const parts = String(availabilityMonth || monthKeyFromDateKey(localDateKey())).split('-').map(Number);
+    const target = new Date(parts[0], parts[1] - 1 + delta, 1);
+    loadAvailabilityMonth(target.getFullYear() + '-' + String(target.getMonth() + 1).padStart(2, '0'));
+  }
+
+  function applyInitialBookingDate() {
+    const field = document.getElementById('field-date');
+    if (!field) return;
+    field.min = localDateKey();
+    const requested = getPageParam('date');
+    if (requested && isValidDateKey(requested) && requested >= field.min) {
+      field.value = requested;
+      availabilityMonth = monthKeyFromDateKey(requested);
+      return;
+    }
+    availabilityMonth = monthKeyFromDateKey(field.value || field.min);
+  }
+
+  function handleDateChange() {
+    const value = document.getElementById('field-date').value;
+    if (!isValidDateKey(value)) {
+      setAvailabilityStatus('กรุณาเลือกวันที่ให้ถูกต้อง', 'warning');
+      return;
+    }
+    availabilityMonth = monthKeyFromDateKey(value);
+    const cached = availabilityCache[availabilityMonth];
+    if (cached) {
+      renderAvailabilityCalendar(availabilityMonth, cached.bookedDates || []);
+      const booked = (cached.bookedDates || []).map(function (date) {
+        return String(date).substring(0, 10);
+      }).indexOf(value) !== -1;
+      setAvailabilityStatus(booked ? 'วันที่นี้มีงานยืนยันแล้ว กรุณาเลือกวันอื่น' : 'เลือกวันที่นี้แล้ว ระบบจะแจ้งทางวงตรวจสอบอีกครั้ง', booked ? 'error' : 'success');
+    } else {
+      loadAvailabilityMonth(availabilityMonth);
+    }
   }
 
   function escapeHtml(value) {
@@ -286,15 +642,43 @@
     });
   }
 
-  async function callApi(action, params = {}) {
-    const res = await fetch(API_URL, {
-      method: 'POST',
-      body: JSON.stringify({ action, ...params }),
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' }
-    });
-    const json = await res.json();
-    if (!json.success) throw new Error(json.error || 'API Error');
-    return json.data;
+  async function callApi(action, params = {}, method = 'POST') {
+    const controller = typeof AbortController === 'undefined' ? null : new AbortController();
+    const timeoutId = controller ? setTimeout(function () { controller.abort(); }, 20000) : null;
+    let url = API_URL;
+    let options = {};
+
+    if (method === 'GET') {
+      const query = new URLSearchParams();
+      query.set('action', action);
+      Object.keys(params).forEach(function (key) {
+        query.set(key, String(params[key]));
+      });
+      url += '?' + query.toString();
+      options = { method: 'GET' };
+    } else {
+      options = {
+        method: 'POST',
+        body: JSON.stringify({ action, ...params }),
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+      };
+    }
+
+    try {
+      if (controller) options.signal = controller.signal;
+      const res = await fetch(url, options);
+      if (!res.ok) throw new Error('เซิร์ฟเวอร์ตอบกลับผิดพลาด (' + res.status + ')');
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || 'API Error');
+      return json.data;
+    } catch (error) {
+      if (error && error.name === 'AbortError') {
+        throw new Error('การตรวจสอบใช้เวลานานเกินไป กรุณาลองใหม่');
+      }
+      throw error;
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
   }
 
   async function submitBooking() {
@@ -307,8 +691,25 @@
       startTime: document.getElementById('field-startTime').value,
       endTime: document.getElementById('field-endTime').value,
       jobType: selectedJobType,
-      remarks: document.getElementById('field-remarks').value.trim()
+      remarks: document.getElementById('field-remarks').value.trim(),
+      mapLink: document.getElementById('field-mapLink').value.trim()
     };
+
+    try {
+      data.mapLink = normalizeMapLink(data.mapLink);
+    } catch (error) {
+      toast('error', error.message);
+      document.getElementById('field-mapLink').focus();
+      return;
+    }
+
+    const selectedMonthData = availabilityCache[monthKeyFromDateKey(data.date)];
+    if (selectedMonthData && (selectedMonthData.bookedDates || []).map(function (date) {
+      return String(date).substring(0, 10);
+    }).indexOf(data.date) !== -1) {
+      toast('warning', 'วันที่นี้มีงานยืนยันแล้ว กรุณาเลือกวันอื่น');
+      return;
+    }
 
     if (!data.customerName || !data.phone || !data.date) {
       toast('error', 'กรุณากรอกชื่อ เบอร์โทร และวันที่จัดงาน');
@@ -377,6 +778,15 @@
       await callApi('verifyAndUpsertMember', { idToken });
 
       showScreen('screen-form');
+      applyInitialBookingDate();
+      document.getElementById('field-mapLink').addEventListener('input', handleMapLinkInput);
+      document.getElementById('field-date').addEventListener('change', handleDateChange);
+      document.getElementById('availability-prev').onclick = function () { changeAvailabilityMonth(-1); };
+      document.getElementById('availability-next').onclick = function () { changeAvailabilityMonth(1); };
+      document.getElementById('btn-check-availability').onclick = function () {
+        loadAvailabilityMonth(availabilityMonth, true);
+      };
+      loadAvailabilityMonth(availabilityMonth);
       loadPublicEquipment();
     } catch (err) {
       console.error('LIFF init failed:', err);
