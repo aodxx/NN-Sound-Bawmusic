@@ -642,6 +642,86 @@ function normalizePublicScheduleMonth_(month) {
 }
 
 
+// ตรวจคิวสำหรับหน้า LIFF โดยส่งกลับเฉพาะผลว่าง/ชน ไม่เปิดเผยชื่อลูกค้าหรือรายละเอียดงาน
+// การตรวจนี้เป็นเพียง UX ล่วงหน้า ส่วน submitLiffBooking จะตรวจซ้ำภายใต้ Script Lock ก่อนเขียนจริง
+function checkLiffAvailability(date, startTime, endTime) {
+  var schedule = normalizeLiffBookingSchedule_(date, startTime, endTime);
+  var conflict = checkConflicts({
+    date: schedule.date,
+    startTime: schedule.startTime,
+    endTime: schedule.endTime,
+    equipment: []
+  });
+
+  return {
+    available: !conflict.hasConflict,
+    hasConflict: !!conflict.hasConflict,
+    dateConflict: !!conflict.dateConflict,
+    conflictingCount: (conflict.conflictingBookings || []).length,
+    message: conflict.hasConflict
+      ? buildLiffConflictMessage_(conflict)
+      : 'ยังไม่พบงานที่ชนกับวันที่และเวลานี้'
+  };
+}
+
+// ตรวจและทำรูปแบบวันที่/เวลาให้เป็นมาตรฐานก่อนรับคำขอจาก LIFF
+function normalizeLiffBookingSchedule_(date, startTime, endTime) {
+  var dateText = String(date || '').trim().substring(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateText)) {
+    throw new Error('วันที่จัดงานต้องอยู่ในรูปแบบ YYYY-MM-DD');
+  }
+
+  var parts = dateText.split('-').map(Number);
+  var parsedDate = new Date(parts[0], parts[1] - 1, parts[2]);
+  if (
+    parsedDate.getFullYear() !== parts[0] ||
+    parsedDate.getMonth() !== parts[1] - 1 ||
+    parsedDate.getDate() !== parts[2]
+  ) {
+    throw new Error('วันที่จัดงานไม่ถูกต้อง');
+  }
+
+  var timezone = Session.getScriptTimeZone() || 'Asia/Bangkok';
+  var todayText = Utilities.formatDate(new Date(), timezone, 'yyyy-MM-dd');
+  if (dateText < todayText) {
+    throw new Error('ไม่สามารถส่งคำขอจองวันที่ผ่านมาแล้วได้');
+  }
+
+  var start = normalizeLiffTime_(startTime, 'เวลาเริ่ม');
+  var end = normalizeLiffTime_(endTime, 'เวลาสิ้นสุด');
+  if ((start && !end) || (!start && end)) {
+    throw new Error('กรุณาระบุเวลาเริ่มและเวลาสิ้นสุดให้ครบ หรือเว้นว่างทั้งคู่');
+  }
+  if (start && end && start >= end) {
+    throw new Error('เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่ม');
+  }
+
+  return { date: dateText, startTime: start, endTime: end };
+}
+
+function normalizeLiffTime_(value, label) {
+  var text = String(value || '').trim();
+  if (!text) return '';
+  if (!/^\d{2}:\d{2}$/.test(text)) {
+    throw new Error(label + 'ต้องอยู่ในรูปแบบ HH:MM');
+  }
+
+  var parts = text.split(':').map(Number);
+  if (parts[0] > 23 || parts[1] > 59) {
+    throw new Error(label + 'ไม่ถูกต้อง');
+  }
+  return String(parts[0]).padStart(2, '0') + ':' + String(parts[1]).padStart(2, '0');
+}
+
+function buildLiffConflictMessage_(conflict) {
+  if (conflict && conflict.dateConflict) {
+    return 'วันที่หรือช่วงเวลานี้มีงานจองอยู่แล้ว กรุณาเลือกวันอื่น หรือระบุเวลาเริ่ม-สิ้นสุดให้ชัดเจนหากเป็นคนละช่วงเวลา';
+  }
+  if (conflict && conflict.equipmentConflicts && conflict.equipmentConflicts.length) {
+    return 'อุปกรณ์ของวงไม่ว่างตามวันที่/เวลาที่เลือก กรุณาเลือกวันอื่นหรือติดต่อทางวง';
+  }
+  return 'ข้อมูลการจองนี้ชนกับงานเดิม กรุณาตรวจสอบวันที่และเวลาอีกครั้ง';
+}
 function createBooking(data, actorId) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAMES.BOOKINGS);
   var id = genId();
