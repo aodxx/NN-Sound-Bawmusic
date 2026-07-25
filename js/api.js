@@ -207,6 +207,13 @@ const BawmusicAPI = {
   getSettings: () => BawmusicAPI.call('getSettings', {}, true),
   updateSettings: (data) => BawmusicAPI.call('updateSettings', { data }, true),
 
+  // Data protection / backups
+  getBackupStatus: () => BawmusicAPI.call('getBackupStatus', {}, true, 30000),
+  installWeeklyBackupTrigger: () => BawmusicAPI.call('installWeeklyBackupTrigger', {}, true, 30000),
+  createBackupNow: () => BawmusicAPI.call('createBackupNow', {}, true, 60000),
+  exportFullBackup: () => BawmusicAPI.call('exportFullBackup', {}, true, 120000),
+  confirmVersionHistoryCheck: () => BawmusicAPI.call('confirmVersionHistoryCheck', {}, true, 30000),
+
   // Payments
   listPayments: (bookingId) => BawmusicAPI.call('listPayments', { bookingId }, true),
   getPayment: (id) => BawmusicAPI.call('getPayment', { id }, true),
