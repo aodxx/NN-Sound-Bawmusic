@@ -62,10 +62,10 @@ const BawmusicAPI = {
     return /เซสชันหมดอายุ|session.*expired|invalid session|session.*invalid/i.test(String(message || ''));
   },
 
-  expireSession(message = 'เซสชันหมดอายุ กรุณาใส่รหัสเข้าใช้งานใหม่') {
+  expireSession(message = 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่') {
     BawmusicAPI.setSessionToken('');
     const gate = document.getElementById('auth-gate');
-    const input = document.getElementById('access-code');
+    const input = document.getElementById('login-password');
     const error = document.getElementById('auth-error');
     const status = document.getElementById('auth-status');
     const submit = document.getElementById('access-submit');
@@ -84,7 +84,7 @@ const BawmusicAPI = {
 
   bindAuthHandlers() {
     const gate = document.getElementById('auth-gate');
-    const input = document.getElementById('access-code');
+    const input = document.getElementById('login-password');
     const error = document.getElementById('auth-error');
     const status = document.getElementById('auth-status');
     const submitButton = document.getElementById('access-submit');
@@ -98,22 +98,24 @@ const BawmusicAPI = {
 
     const submit = async () => {
       if (submitButton.disabled) return;
-      const accessCode = input.value.trim();
-      if (!accessCode) {
+      const usernameInput = document.getElementById('login-username');
+      const username = usernameInput ? usernameInput.value.trim() : '';
+      const password = input.value;
+      if (!username || !password) {
         setStatus('');
-        setError('กรุณากรอกรหัสเข้าใช้งาน');
-        input.focus();
+        setError('กรุณากรอกชื่อผู้ใช้และรหัสผ่าน');
+        (username ? input : usernameInput)?.focus();
         return;
       }
 
       setError('');
-      setStatus('กำลังตรวจสอบรหัส...');
+      setStatus('กำลังตรวจสอบบัญชี...');
       submitButton.disabled = true;
 
       try {
         // ใช้ GET เฉพาะขั้นตอนสร้าง session เพราะ Apps Script Web App
         // อาจ redirect คำขอ POST ระหว่างโดเมน ทำให้ body หายบนบางเบราว์เซอร์
-        const data = await BawmusicAPI.call('createSession', { accessCode }, false, 20000);
+        const data = await BawmusicAPI.call('createSession', { username, password }, false, 20000);
         if (!data || !data.sessionToken) throw new Error('ระบบไม่ส่งข้อมูลยืนยันการเข้าสู่ระบบ');
         BawmusicAPI.setSessionToken(data.sessionToken);
         setStatus('เข้าสู่ระบบสำเร็จ กำลังเปิดระบบ...');
@@ -135,10 +137,13 @@ const BawmusicAPI = {
       event.preventDefault();
       submit();
     };
-    input.oninput = () => {
-      setError('');
-      setStatus('');
-    };
+    const usernameInput = document.getElementById('login-username');
+    [usernameInput, input].filter(Boolean).forEach((field) => {
+      field.oninput = () => {
+        setError('');
+        setStatus('');
+      };
+    });
     input.onkeydown = (event) => {
       if (event.key === 'Enter') {
         event.preventDefault();
