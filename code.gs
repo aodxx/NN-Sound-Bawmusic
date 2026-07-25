@@ -35,7 +35,8 @@ var DRIVE_DEFAULT_FOLDER_IDS = {
   // ไม่เก็บ Folder ID จริงไว้ใน repository สาธารณะ
   // ให้ตั้งค่าใน Apps Script > Project Settings > Script Properties
   EQUIPMENT: '',
-  PROFILE_BACKUP: ''
+  PROFILE_BACKUP: '',
+  BACKUP: ''
 };
 
 // Action ที่เปิดให้เรียกได้โดยไม่ต้องมี session ของแอป (ใช้จากหน้า LIFF ของลูกค้า)
@@ -116,6 +117,13 @@ function handleRequest(e, method) {
       // Settings
       case 'getSettings': result = getSettings(); break;
       case 'updateSettings': result = updateSettings(params.data); break;
+
+      // Data protection / backups (admin session required)
+      case 'getBackupStatus': result = getBackupStatus(); break;
+      case 'installWeeklyBackupTrigger': result = installWeeklyBackupTrigger(params.actorId); break;
+      case 'createBackupNow': result = createBackupNow(params.actorId); break;
+      case 'exportFullBackup': result = exportFullBackup(params.actorId); break;
+      case 'confirmVersionHistoryCheck': result = confirmVersionHistoryCheck(params.actorId); break;
 
       // Members (LINE)
       case 'listMembers': result = listMembers(); break;
@@ -1429,6 +1437,181 @@ function updateSettings(data) {
     if (!found) sheet.appendRow([key, data[key]]);
   });
   return getSettings();
+}
+
+
+// ---------- DATA PROTECTION / BACKUPS ----------
+
+var BACKUP_TRIGGER_HANDLER_ = 'runWeeklySpreadsheetBackup';
+var BACKUP_FOLDER_PROPERTY_ = 'DRIVE_BACKUP_FOLDER_ID';
+var BACKUP_LAST_AT_PROPERTY_ = 'BACKUP_LAST_SUCCESS_AT';
+var BACKUP_LAST_FILE_ID_PROPERTY_ = 'BACKUP_LAST_FILE_ID';
+var VERSION_HISTORY_CHECKED_AT_PROPERTY_ = 'VERSION_HISTORY_CHECKED_AT';
+var VERSION_HISTORY_CHECKED_BY_PROPERTY_ = 'VERSION_HISTORY_CHECKED_BY';
+
+function getBackupFolder_() {
+  var props = PropertiesService.getScriptProperties();
+  var folderId = props.getProperty(BACKUP_FOLDER_PROPERTY_);
+  if (folderId) {
+    try {
+      return DriveApp.getFolderById(folderId);
+    } catch (e) {
+      throw new Error('เปิดโฟลเดอร์สำรองจาก DRIVE_BACKUP_FOLDER_ID ไม่ได้: ' + e.message);
+    }
+  }
+
+  var folder = DriveApp.createFolder('Bawmusic Backups');
+  props.setProperty(BACKUP_FOLDER_PROPERTY_, folder.getId());
+  return folder;
+}
+
+function getWeeklyBackupTriggers_() {
+  return ScriptApp.getProjectTriggers().filter(function (trigger) {
+    return trigger.getHandlerFunction() === BACKUP_TRIGGER_HANDLER_;
+  });
+}
+
+function getBackupStatus() {
+  var props = PropertiesService.getScriptProperties();
+  var folder = getBackupFolder_();
+  var triggers = getWeeklyBackupTriggers_();
+  return {
+    folderId: folder.getId(),
+    folderName: folder.getName(),
+    folderUrl: folder.getUrl(),
+    weeklyTriggerInstalled: triggers.length > 0,
+    weeklyTriggerCount: triggers.length,
+    schedule: triggers.length ? 'ทุกวันจันทร์ ประมาณ 03:00–04:00 น. (Asia/Bangkok)' : '',
+    lastBackupAt: props.getProperty(BACKUP_LAST_AT_PROPERTY_) || '',
+    lastBackupFileId: props.getProperty(BACKUP_LAST_FILE_ID_PROPERTY_) || '',
+    versionHistoryCheckedAt: props.getProperty(VERSION_HISTORY_CHECKED_AT_PROPERTY_) || '',
+    versionHistoryCheckedBy: props.getProperty(VERSION_HISTORY_CHECKED_BY_PROPERTY_) || '',
+    versionHistoryRequiresManualCheck: true
+  };
+}
+
+function installWeeklyBackupTrigger(actorId) {
+  var triggers = getWeeklyBackupTriggers_();
+  for (var i = 0; i < triggers.length; i++) {
+    ScriptApp.deleteTrigger(triggers[i]);
+  }
+
+  ScriptApp.newTrigger(BACKUP_TRIGGER_HANDLER_)
+    .timeBased()
+    .onWeekDay(ScriptApp.WeekDay.MONDAY)
+    .atHour(3)
+    .inTimezone('Asia/Bangkok')
+    .create();
+
+  var status = getBackupStatus();
+  logAudit(actorId || 'admin', 'install_weekly_backup_trigger', 'System:Backup', null, {
+    schedule: status.schedule,
+    folderId: status.folderId
+  });
+  return status;
+}
+
+function createBackupNow(actorId) {
+  return createSpreadsheetBackup_(actorId || 'admin', 'manual');
+}
+
+// Trigger เรียกฟังก์ชันนี้โดยตรง จึงไม่มี session แต่ทำงานด้วยสิทธิ์เจ้าของ Deployment
+function runWeeklySpreadsheetBackup() {
+  return createSpreadsheetBackup_('system', 'weekly_trigger');
+}
+
+function createSpreadsheetBackup_(actorId, source) {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error('ระบบสำรองข้อมูลกำลังทำงานอยู่ กรุณาลองใหม่ภายหลัง');
+
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (!ss) throw new Error('ไม่พบ Spreadsheet ที่ผูกกับ Apps Script โปรเจกต์นี้');
+    SpreadsheetApp.flush();
+
+    var timezone = ss.getSpreadsheetTimeZone() || 'Asia/Bangkok';
+    var stamp = Utilities.formatDate(new Date(), timezone, 'yyyy-MM-dd_HHmmss');
+    var fileName = sanitizeBackupFileName_(ss.getName()) + '_backup_' + stamp;
+    var copy = DriveApp.getFileById(ss.getId()).makeCopy(fileName, getBackupFolder_());
+    var nowIso = new Date().toISOString();
+    var props = PropertiesService.getScriptProperties();
+    props.setProperty(BACKUP_LAST_AT_PROPERTY_, nowIso);
+    props.setProperty(BACKUP_LAST_FILE_ID_PROPERTY_, copy.getId());
+
+    logAudit(actorId, 'create_spreadsheet_backup', 'System:Backup', null, {
+      source: source,
+      fileId: copy.getId(),
+      fileName: copy.getName(),
+      createdAt: nowIso
+    });
+
+    return {
+      fileId: copy.getId(),
+      fileName: copy.getName(),
+      fileUrl: copy.getUrl(),
+      createdAt: nowIso,
+      source: source
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function exportFullBackup(actorId) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) throw new Error('ไม่พบ Spreadsheet ที่ผูกกับ Apps Script โปรเจกต์นี้');
+  SpreadsheetApp.flush();
+
+  var timezone = ss.getSpreadsheetTimeZone() || 'Asia/Bangkok';
+  var stamp = Utilities.formatDate(new Date(), timezone, 'yyyy-MM-dd_HHmmss');
+  var fileName = sanitizeBackupFileName_(ss.getName()) + '_full_export_' + stamp + '.xlsx';
+  var exportUrl = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(ss.getId()) + '/export?format=xlsx';
+  var response = UrlFetchApp.fetch(exportUrl, {
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+    muteHttpExceptions: true
+  });
+
+  if (response.getResponseCode() !== 200) {
+    throw new Error('ส่งออกข้อมูลไม่สำเร็จ (HTTP ' + response.getResponseCode() + ')');
+  }
+
+  var blob = response.getBlob().setName(fileName);
+  var bytes = blob.getBytes();
+  var file = getBackupFolder_().createFile(blob);
+  var nowIso = new Date().toISOString();
+
+  logAudit(actorId || 'admin', 'export_full_backup', 'System:Backup', null, {
+    fileId: file.getId(),
+    fileName: fileName,
+    sizeBytes: bytes.length,
+    createdAt: nowIso
+  });
+
+  return {
+    fileId: file.getId(),
+    fileName: fileName,
+    fileUrl: file.getUrl(),
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    sizeBytes: bytes.length,
+    base64: Utilities.base64Encode(bytes),
+    createdAt: nowIso
+  };
+}
+
+function confirmVersionHistoryCheck(actorId) {
+  var props = PropertiesService.getScriptProperties();
+  var checkedAt = new Date().toISOString();
+  var checkedBy = actorId || 'admin';
+  props.setProperty(VERSION_HISTORY_CHECKED_AT_PROPERTY_, checkedAt);
+  props.setProperty(VERSION_HISTORY_CHECKED_BY_PROPERTY_, checkedBy);
+  logAudit(checkedBy, 'confirm_version_history_check', 'System:Backup', null, {
+    checkedAt: checkedAt
+  });
+  return getBackupStatus();
+}
+
+function sanitizeBackupFileName_(name) {
+  return String(name || 'Bawmusic').replace(/[\\/:*?"<>|#%{}~&]/g, '-').substring(0, 100);
 }
 
 // ---------- MEMBERS (LINE) ----------
