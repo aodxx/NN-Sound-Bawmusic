@@ -1,0 +1,198 @@
+# Bawmusic — Development Roadmap (ฉบับส่งมอบนักพัฒนา)
+
+**อ้างอิงจาก:** `code.gs` จริงของระบบ (DB_SCHEMA_VERSION ปัจจุบัน = `3.5.0`)
+**จัดทำ:** สำหรับส่งต่อให้นักพัฒนาดำเนินการตามลำดับเฟส
+**หลักการสำคัญ:** ระบบออกแบบให้ migrate แบบไม่ทำลายข้อมูลเดิมอยู่แล้ว (ผ่าน `createSheetIfMissing`, `addColumnIfMissing`, `migrateSchemaIfNeeded`) ทุกงานด้านล่างต้องใช้ pattern เดิมนี้ ห้ามลบ/เขียนทับคอลัมน์หรือชีตเดิมโดยตรง
+
+---
+
+## 🔴 เฟส 0 — ความปลอดภัยเร่งด่วน (ทำก่อนทุกเฟส)
+
+> พบข้อมูลลับ (APP_ACCESS_CODE, ADMIN_TOKEN, LINE_CHANNEL_ACCESS_TOKEN) ถูกวางไว้ในแท็บโน้ตของ Google Sheet ที่เปิดสิทธิ์แชร์แบบเข้าถึงได้จากลิงก์ ต้องแก้ก่อนเริ่มงานเฟสอื่นทั้งหมด
+
+- [ ] เปลี่ยนสิทธิ์แชร์ Google Sheet เป็นจำกัดเฉพาะบัญชีที่ระบุ (ไม่ใช่ "Anyone with the link")
+- [ ] ลบแท็บ "โน๊ตของฉัน1/2" ที่มีค่าลับออกจาก Sheet ทั้งหมด
+- [ ] หมุนเวียน (rotate) ค่าลับทั้งหมดใน Script Properties:
+  - `APP_ACCESS_CODE` (ค่าปัจจุบันคือ `1234` ซึ่งเดาง่ายมาก ต้องเปลี่ยนเป็นค่าที่คาดเดายากขึ้น)
+  - `ADMIN_TOKEN`
+  - `LINE_CHANNEL_ACCESS_TOKEN` (ออกใหม่จาก LINE Developers Console)
+- [ ] ตรวจสอบว่าไม่มีค่าลับใดหลงเหลืออยู่ใน Repository, README, หรือ commit history บน GitHub
+
+---
+
+## 🔴 เฟส 1 — อุดรูรั่วความปลอดภัยของระบบ
+
+- [ ] แยกรหัสผ่านตามคนใช้งาน แทนรหัสร่วมเดียว (`APP_ACCESS_CODE`) เพื่อให้ `actorId` ใน Audit Log ระบุตัวคนแก้ไขได้จริง
+- [ ] เพิ่ม rate limiting ให้ `PUBLIC_ACTIONS` ทั้งหมด (`createSession`, `submitLiffBooking`, `checkLiffAvailability`, `verifyAndUpsertMember`, `verifyLineToken`, `getBookingByToken`, `listPublicEquipment`, `getMyBookings`, `listPublicSchedule`) — ใช้ `CacheService` เก็บ counter ต่อ IP/ต่อ token ชั่วคราว
+- [ ] ตรวจสอบว่า Session Token (อายุ 21,600 วินาที ผ่าน `CacheService`) หมดอายุและถูกเรียกใช้ตรวจสอบครบทุกจุดที่ควร
+
+---
+
+## 🟡 เฟส 2 — กันข้อมูลหาย
+
+- [ ] ตรวจสอบ Google Sheets Version History ใช้งานได้จริง
+- [ ] เพิ่ม time-based trigger ใน Apps Script สำรอง Spreadsheet ทั้งชุดไปเก็บที่อื่นรายสัปดาห์ (เช่น `SpreadsheetApp.create()` + คัดลอกชีต หรือ export เป็นไฟล์เก็บใน Drive โฟลเดอร์แยก)
+- [ ] เพิ่มฟังก์ชัน/action ใหม่สำหรับ export ข้อมูลทั้งระบบเป็นไฟล์ดาวน์โหลดได้ (เช่น `exportFullBackup` action ที่แอดมินเรียกได้)
+
+---
+
+## 🟢 เฟส 3 — ฟีเจอร์ที่ธุรกิจต้องใช้จริง
+
+- [ ] เชื่อม `sendBookingConfirmation` (มีอยู่แล้วใน `handleRequest`) เข้ากับ flow ยืนยันงานอัตโนมัติ ให้ทำงานทุกครั้งที่ `updateBooking` เปลี่ยนสถานะเป็น `confirmed`
+- [ ] เพิ่ม field แนบหลักฐานการชำระเงินขึ้น Drive จากฟอร์ม `createPayment`/`updatePayment` (คอลัมน์ `evidenceUrl` มีอยู่แล้วใน `PAYMENTS_HEADERS` แต่ต้องเพิ่ม flow อัปโหลดไฟล์จริงจากฝั่งฟอร์ม)
+- [ ] เพิ่ม parameter กรองแบบผสม (ช่วงวันที่ + ประเภทงาน) ใน `listBookings(params)`
+
+---
+
+## 🟡 เฟส 4 — ปรับโครงสร้างฐานข้อมูลรองรับการโต
+
+> **สำคัญ:** ไม่ต้องสร้างฐานข้อมูลใหม่ ระบบมี migration pattern อยู่แล้ว งานเฟสนี้คือ "ต่อยอด" จาก `migrateSchemaIfNeeded()` เดิม
+
+### 4.0 Schema ปัจจุบัน (อ้างอิงจาก code.gs จริง)
+
+```
+Customers:      id, name, phone, line, facebook, address, mapLink, notes, createdAt, memberId
+Bookings:       id, customerId, customerName, phone, line, venue, mapLink, province,
+                date, startTime, endTime, jobType, package, price, deposit, remaining,
+                remarks, equipment, status, createdAt, updatedAt, bookingToken
+Equipment:      id, name, category, availableQty, unit, remarks, imageFileId, imageUrl,
+                imageName, imageUpdatedAt
+Templates:      id, name, jobType, equipmentPreset, notes
+Settings:       key, value
+StatisticsCache: key, value, updatedAt   (ยังไม่ใช้งานจริง)
+Members:        lineUserId, displayName, pictureUrl, isFriend, isBlocked, marketingConsent,
+                lastActiveAt, createdAt, profileDriveFileId, profileDriveUpdatedAt
+Payments:       id, bookingId, amount, type, paymentDate, evidenceUrl, notes, createdAt, method
+AuditLog:       id, actorId, action, entity, beforeData, afterData, timestamp
+```
+
+### 4.1 เพิ่ม `endDate` รองรับงานข้ามวัน (Overnight Booking)
+
+**ปัญหา:** ระบบตีความว่า "วันที่มีงาน = ไม่ว่างทั้งวัน" ทำให้งานข้ามวัน (เช่น 20:00–01:00) บล็อกคิวเช้าวันถัดไปทั้งหมด ทั้งที่วงว่างจริง
+
+**Step 1 — เพิ่มคอลัมน์ใน `migrateSchemaIfNeeded()`**
+
+```javascript
+var bookingsSheet = ss.getSheetByName(SHEET_NAMES.BOOKINGS);
+if (bookingsSheet) {
+  addColumnIfMissing(bookingsSheet, 'bookingToken');
+  addColumnIfMissing(bookingsSheet, 'endDate'); // ใหม่
+}
+```
+
+**Step 2 — Backfill ข้อมูลเก่า (สำคัญ: `addColumnIfMissing` เติมแค่หัวตาราง ไม่เติมค่าให้แถวเก่า)**
+
+```javascript
+function backfillBookingEndDate_(ss) {
+  var sheet = ss.getSheetByName(SHEET_NAMES.BOOKINGS);
+  var data = sheet.getDataRange().getValues();
+  var headers = data[0];
+  var dateCol = headers.indexOf('date');
+  var endDateCol = headers.indexOf('endDate');
+  var startCol = headers.indexOf('startTime');
+  var endCol = headers.indexOf('endTime');
+
+  for (var i = 1; i < data.length; i++) {
+    if (!data[i][endDateCol]) {
+      // ค่าตั้งต้น: endDate = date เดิม (งานไม่ข้ามวัน)
+      sheet.getRange(i + 1, endDateCol + 1).setValue(data[i][dateCol]);
+
+      // ถ้าเวลาเริ่ม > เวลาสิ้นสุด แปลว่าข้อมูลเก่าอาจเป็นงานข้ามวันที่ไม่เคยถูกระบุไว้
+      // ห้ามแก้อัตโนมัติ ให้ทำเครื่องหมายไว้ให้แอดมินตรวจสอบเอง
+      if (data[i][startCol] && data[i][endCol] && data[i][startCol] > data[i][endCol]) {
+        console.warn('ต้องตรวจสอบ booking id: ' + data[i][headers.indexOf('id')] + ' (เวลาเริ่ม > เวลาสิ้นสุด)');
+      }
+    }
+  }
+}
+```
+
+**Step 3 — แก้ `normalizeLiffBookingSchedule_()`** ให้รองรับ `endTime < startTime` เมื่อมี `endDate` ต่างจาก `date` แทนการ throw error ทันที
+
+**Step 4 — แก้ `checkConflicts()`** ให้ตรวจช่วงเวลาแบบเต็ม ไม่ใช่กรอง "วันเดียวกัน" ก่อน ใช้กฎเดียวทั่วระบบ:
+
+```text
+ชนกันเมื่อ: candidateStart < existingEnd AND existingStart < candidateEnd
+```
+
+ต้องใช้กฎนี้ให้ครบทุกจุด: `checkConflicts`, `checkLiffAvailability`, `createBooking`, `updateBooking`, การยืนยันงาน, `checkAvailability` (อุปกรณ์), ปฏิทิน/รายงาน
+
+**Step 5 — เพิ่ม buffer เวลาเผื่อก่อน/หลังงาน** (ค่าตั้งต้น 120 นาทีทั้งสองด้าน ปรับได้ผ่าน Settings) เมื่อคำนวณช่วงเวลาที่ "กันคิว" จริง (ต่างจากช่วงเวลาที่ "จัดงาน" จริง)
+
+**Step 6 — bump `DB_SCHEMA_VERSION`**
+
+```javascript
+var DB_SCHEMA_VERSION = '3.6.0'; // จากเดิม 3.5.0 — ถ้าไม่เปลี่ยน migration จะไม่ถูกรัน
+```
+
+**จุดเสี่ยงที่ต้องปิดให้ครบก่อน Deploy:**
+- [ ] Timezone/รูปแบบวันเวลา — แปลง `date` + `time` เป็น Date object จุดเดียว ใช้ร่วมกันทุกฟังก์ชัน (ระบบตั้ง `Asia/Bangkok` ไว้แล้ว)
+- [ ] Race condition — ตรวจว่ากฎตรวจคิวชุดใหม่ยังทำงานภายใต้ `LockService.getScriptLock()` เดิม
+- [ ] กรณีไม่กรอกเวลา — ระบุชัดว่าจะตีความเป็น 00:00–23:59 ของวันนั้นหรือไม่
+
+**ทดสอบก่อน Deploy จริง 3 กรณี:** งานปกติ (ไม่ข้ามวัน), งานข้ามวัน, งานเช้าวันถัดไปหลังงานข้ามวันจบ
+
+---
+
+### 4.2 แยกอุปกรณ์ในใบจองออกเป็นชีตใหม่ (BookingEquipment)
+
+**ปัญหา:** คอลัมน์ `equipment` ใน Bookings เก็บเป็น JSON string ฝังอยู่ในแถวเดียว ทำให้ค้นหา/รายงานการใช้อุปกรณ์ย้อนหลังทำไม่ได้โดยตรง ต้องไล่เปิดทุกใบจอง
+
+**Step 1 — สร้างชีตใหม่**
+
+```javascript
+createSheetIfMissing(ss, 'BookingEquipment', [
+  'id', 'bookingId', 'equipmentId', 'equipmentName', 'unit', 'qty'
+]);
+```
+
+**Step 2 — เขียน migration script แยกต่างหาก (ไม่ auto-run ทุก request เหมือน addColumnIfMissing)**
+
+```javascript
+function migrateBookingEquipmentToNewSheet_(ss) {
+  var bookingsSheet = ss.getSheetByName(SHEET_NAMES.BOOKINGS);
+  var beSheet = ss.getSheetByName('BookingEquipment');
+  var data = bookingsSheet.getDataRange().getValues();
+  var headers = data[0];
+  var idCol = headers.indexOf('id');
+  var eqCol = headers.indexOf('equipment');
+
+  for (var i = 1; i < data.length; i++) {
+    var raw = data[i][eqCol];
+    if (!raw) continue;
+    try {
+      var items = JSON.parse(raw); // คาดว่าเป็น array ของ {id, name, unit, qty}
+      items.forEach(function (item) {
+        beSheet.appendRow([genId(), data[i][idCol], item.id, item.name, item.unit, item.qty]);
+      });
+    } catch (e) {
+      console.error('parse equipment failed for booking ' + data[i][idCol] + ': ' + e);
+    }
+  }
+}
+```
+
+**Step 3 — ระยะเปลี่ยนผ่าน:** เก็บคอลัมน์ `equipment` เดิมใน Bookings ไว้คู่ขนาน ไม่ลบทันที จนกว่าโค้ดทุกจุด (สร้างงาน แก้ไขงาน แสดงผล LIFF ตรวจสต็อก) จะอ่าน/เขียนจากชีตใหม่ถูกต้องครบแล้ว ค่อยเลิกใช้คอลัมน์เดิมทีหลัง
+
+**Step 4 — จุดที่ต้องแก้โค้ดให้ตรงกับโครงสร้างใหม่:** `createBooking`, `updateBooking`, `checkAvailability`, หน้าจอ Admin (bookings.js, equipment.js), หน้า LIFF, `getAnalytics`
+
+### 4.3 งานอื่นในเฟส 4
+
+- [ ] เพิ่มการแบ่งหน้าข้อมูล (pagination) ใน `listBookings`, `listCustomers` ก่อนข้อมูลเยอะจนโหลดช้า
+- [ ] รวม API URL (`js/api.js`, `liff/index.html`) ให้มาจาก config จุดเดียว
+
+---
+
+## ลำดับการดำเนินงานที่แนะนำ
+
+```
+เฟส 0 (ความปลอดภัยเร่งด่วน) → เฟส 1 → เฟส 2 → เฟส 4.1 (endDate) → เฟส 3 → เฟส 4.2/4.3
+```
+
+เฟส 4.1 ถูกจัดให้ทำก่อนเฟส 3 เพราะเป็นปัญหาที่กระทบการรับงานจริงของธุรกิจโดยตรง (บล็อกคิวที่ไม่ควรบล็อก) ส่วนเฟส 4.2 ปรับใหญ่กว่าและไม่กระทบการทำงานประจำวันเร่งด่วนเท่า จึงทำทีหลังได้
+
+## หมายเหตุสำหรับนักพัฒนา
+
+- ทุกการแก้ `code.gs` ต้อง Deploy เป็น Web App เวอร์ชันใหม่เสมอ (กด Save อย่างเดียวไม่พอ) — ไปที่ Deploy → Manage deployments → แก้ไข deployment ให้ใช้เวอร์ชันล่าสุด
+- ห้าม commit ค่าใน Script Properties (โดยเฉพาะหลังเฟส 0) ลง Repository หรือ README โดยเด็ดขาด
+- ทดสอบทุก migration บน Google Sheet สำเนา (copy) ก่อน รันกับฐานข้อมูลจริงเสมอ
