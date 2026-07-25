@@ -1,22 +1,10 @@
-# Bawmusic — Development Roadmap (ฉบับส่งมอบนักพัฒนา)
-
+# Bawmusic — Development Roadmap
 **อ้างอิงจาก:** `code.gs` จริงของระบบ (DB_SCHEMA_VERSION ปัจจุบัน = `3.5.0`)
 **จัดทำ:** สำหรับส่งต่อให้นักพัฒนาดำเนินการตามลำดับเฟส
 **หลักการสำคัญ:** ระบบออกแบบให้ migrate แบบไม่ทำลายข้อมูลเดิมอยู่แล้ว (ผ่าน `createSheetIfMissing`, `addColumnIfMissing`, `migrateSchemaIfNeeded`) ทุกงานด้านล่างต้องใช้ pattern เดิมนี้ ห้ามลบ/เขียนทับคอลัมน์หรือชีตเดิมโดยตรง
 
 ---
 
-## 🔴 เฟส 0 — ความปลอดภัยเร่งด่วน (ทำก่อนทุกเฟส)
-
-> พบข้อมูลลับ (APP_ACCESS_CODE, ADMIN_TOKEN, LINE_CHANNEL_ACCESS_TOKEN) ถูกวางไว้ในแท็บโน้ตของ Google Sheet ที่เปิดสิทธิ์แชร์แบบเข้าถึงได้จากลิงก์ ต้องแก้ก่อนเริ่มงานเฟสอื่นทั้งหมด
-
-- [ ] เปลี่ยนสิทธิ์แชร์ Google Sheet เป็นจำกัดเฉพาะบัญชีที่ระบุ (ไม่ใช่ "Anyone with the link")
-- [ ] ลบแท็บ "โน๊ตของฉัน1/2" ที่มีค่าลับออกจาก Sheet ทั้งหมด
-- [ ] หมุนเวียน (rotate) ค่าลับทั้งหมดใน Script Properties:
-  - `APP_ACCESS_CODE` (ค่าปัจจุบันคือ `1234` ซึ่งเดาง่ายมาก ต้องเปลี่ยนเป็นค่าที่คาดเดายากขึ้น)
-  - `ADMIN_TOKEN`
-  - `LINE_CHANNEL_ACCESS_TOKEN` (ออกใหม่จาก LINE Developers Console)
-- [ ] ตรวจสอบว่าไม่มีค่าลับใดหลงเหลืออยู่ใน Repository, README, หรือ commit history บน GitHub
 
 ---
 
