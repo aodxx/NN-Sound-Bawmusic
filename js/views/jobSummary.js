@@ -35,7 +35,7 @@ function paintJobSummary(b, settings) {
         <div class="space-y-2.5 text-base">
           ${summaryRow('fa-user', 'ลูกค้า', b.customerName)}
           ${summaryRow('fa-phone', 'โทร', b.phone)}
-          ${summaryRow('fa-calendar', 'วันที่', Utils.formatDate(b.date))}
+          ${summaryRow('fa-calendar', 'วันที่', Utils.formatDate(b.date) + (b.endDate && String(b.endDate).substring(0, 10) !== String(b.date).substring(0, 10) ? ' ถึง ' + Utils.formatDate(b.endDate) : ''))}
           ${summaryRow('fa-clock', 'เวลา', `${b.startTime || '-'} - ${b.endTime || '-'}`)}
           ${summaryRow('fa-location-dot', 'สถานที่', b.venue)}
           ${b.mapLink ? summaryRow('fa-map', 'แผนที่', b.mapLink) : ''}

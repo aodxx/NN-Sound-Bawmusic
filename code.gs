@@ -26,7 +26,7 @@ var MEMBERS_HEADERS = ['lineUserId', 'displayName', 'pictureUrl', 'isFriend', 'i
 var EQUIPMENT_HEADERS = ['id', 'name', 'category', 'availableQty', 'unit', 'remarks', 'imageFileId', 'imageUrl', 'imageName', 'imageUpdatedAt'];
 var PAYMENTS_HEADERS = ['id', 'bookingId', 'amount', 'type', 'paymentDate', 'evidenceUrl', 'notes', 'createdAt', 'method'];
 var AUDIT_LOG_HEADERS = ['id', 'actorId', 'action', 'entity', 'beforeData', 'afterData', 'timestamp'];
-var DB_SCHEMA_VERSION = '3.5.0';
+var DB_SCHEMA_VERSION = '3.6.0';
 var DRIVE_WRITE_SCOPE = 'https://www.googleapis.com/auth/drive';
 
 // โฟลเดอร์ที่สร้างไว้ใน Google Drive ของ Bawmusic
@@ -82,14 +82,14 @@ function handleRequest(e, method) {
       // Bookings
       case 'listBookings': result = listBookings(params); break;
       case 'getBooking': result = getBooking(params.id); break;
-      case 'createBooking': result = createBooking(params.data, params.actorId); break;
-      case 'updateBooking': result = updateBooking(params.id, params.data, params.actorId); break;
+      case 'createBooking': result = createBookingSafely_(params.data, params.actorId); break;
+      case 'updateBooking': result = updateBookingSafely_(params.id, params.data, params.actorId); break;
       case 'deleteBooking': result = deleteBooking(params.id, params.actorId); break;
       case 'checkConflicts': result = checkConflicts(params.data); break;
       case 'getBookingByToken': result = getBookingByToken(params.token); break;
       case 'getMyBookings': result = getMyBookings(params.idToken, params); break;
       case 'listPublicSchedule': result = listPublicSchedule(params.month); break;
-      case 'checkLiffAvailability': result = checkLiffAvailability(params.date, params.startTime, params.endTime, params.equipment); break;
+      case 'checkLiffAvailability': result = checkLiffAvailability(params.date, params.startTime, params.endTime, params.equipment, params.endDate); break;
 
       // Customers
       case 'listCustomers': result = listCustomers(params); break;
@@ -106,7 +106,7 @@ function handleRequest(e, method) {
       case 'updateEquipment': result = updateEquipment(params.id, params.data); break;
       case 'deleteEquipment': result = deleteEquipment(params.id); break;
       case 'uploadEquipmentImage': result = uploadEquipmentImage(params.data); break;
-      case 'checkAvailability': result = checkAvailability(params.date, params.items); break;
+      case 'checkAvailability': result = checkAvailability(params.date, params.items, params.startTime, params.endTime, params.endDate); break;
 
       // Templates
       case 'listTemplates': result = listTemplates(); break;
@@ -379,7 +379,7 @@ function ensureDatabaseInitialized() {
   createSheetIfMissing(ss, SHEET_NAMES.BOOKINGS, [
     'id', 'customerId', 'customerName', 'phone', 'line', 'venue', 'mapLink', 'province',
     'date', 'startTime', 'endTime', 'jobType', 'package', 'price', 'deposit', 'remaining',
-    'remarks', 'equipment', 'status', 'createdAt', 'updatedAt', 'bookingToken'
+    'remarks', 'equipment', 'status', 'createdAt', 'updatedAt', 'bookingToken', 'endDate'
   ]);
   createSheetIfMissing(ss, SHEET_NAMES.EQUIPMENT, EQUIPMENT_HEADERS);
   createSheetIfMissing(ss, SHEET_NAMES.TEMPLATES, [
@@ -407,7 +407,9 @@ function migrateSchemaIfNeeded(ss) {
   if (settingsSheet) {
     var existingKeys = settingsSheet.getDataRange().getValues().slice(1).map(function (r) { return r[0]; });
     var requiredDefaults = {
-      bannerImage: 'https://raw.githubusercontent.com/aodxx/NN-Sound-Bawmusic/b652dd18fe17ca9d81405d808792ba133ac6f508/100.png'
+      bannerImage: 'https://raw.githubusercontent.com/aodxx/NN-Sound-Bawmusic/b652dd18fe17ca9d81405d808792ba133ac6f508/100.png',
+      bookingBufferBeforeMinutes: '120',
+      bookingBufferAfterMinutes: '120'
     };
     Object.keys(requiredDefaults).forEach(function (key) {
       if (existingKeys.indexOf(key) === -1) {
@@ -424,7 +426,11 @@ function migrateSchemaIfNeeded(ss) {
   if (customersSheet) addColumnIfMissing(customersSheet, 'memberId');
 
   var bookingsSheet = ss.getSheetByName(SHEET_NAMES.BOOKINGS);
-  if (bookingsSheet) addColumnIfMissing(bookingsSheet, 'bookingToken');
+  if (bookingsSheet) {
+    addColumnIfMissing(bookingsSheet, 'bookingToken');
+    addColumnIfMissing(bookingsSheet, 'endDate');
+    backfillBookingEndDate_(bookingsSheet);
+  }
 
   var equipmentSheet = ss.getSheetByName(SHEET_NAMES.EQUIPMENT);
   if (equipmentSheet) {
@@ -440,6 +446,37 @@ function migrateSchemaIfNeeded(ss) {
   if (paymentsSheet) {
     PAYMENTS_HEADERS.slice(8).forEach(function (header) { addColumnIfMissing(paymentsSheet, header); });
   }
+}
+
+// เติม endDate ให้ข้อมูลเก่าแบบไม่เดาว่างานใดข้ามวัน:
+// ค่าเริ่มต้นเท่ากับ date และเขียนคำเตือนให้ผู้ดูแลตรวจรายการที่เวลาเริ่มมากกว่าเวลาสิ้นสุด
+function backfillBookingEndDate_(sheet) {
+  var data = sheet.getDataRange().getValues();
+  if (data.length < 2) return;
+  var headers = data[0];
+  var idCol = headers.indexOf('id');
+  var dateCol = headers.indexOf('date');
+  var endDateCol = headers.indexOf('endDate');
+  var startCol = headers.indexOf('startTime');
+  var endCol = headers.indexOf('endTime');
+  if (dateCol === -1 || endDateCol === -1) return;
+
+  var values = [];
+  var changed = false;
+  for (var i = 1; i < data.length; i++) {
+    var current = data[i][endDateCol];
+    var startDate = normalizeDateCell_(data[i][dateCol]);
+    if (!current && startDate) {
+      current = startDate;
+      changed = true;
+      if (data[i][startCol] && data[i][endCol] &&
+          normalizeTimeText_(data[i][startCol]) > normalizeTimeText_(data[i][endCol])) {
+        console.warn('ตรวจ endDate ของ booking id: ' + data[i][idCol] + ' (เวลาเริ่ม > เวลาสิ้นสุด)');
+      }
+    }
+    values.push([current]);
+  }
+  if (changed) sheet.getRange(2, endDateCol + 1, values.length, 1).setValues(values);
 }
 
 // เพิ่มคอลัมน์ใหม่ต่อท้ายชีตเดิม โดยไม่กระทบข้อมูล/คอลัมน์ที่มีอยู่แล้ว
@@ -473,7 +510,9 @@ function seedDefaultSettings(ss) {
     ['facebook', ''],
     ['primaryColor', '#1a1a2e'],
     ['accentColor', '#d4af37'],
-    ['theme', 'dark']
+    ['theme', 'dark'],
+    ['bookingBufferBeforeMinutes', '120'],
+    ['bookingBufferAfterMinutes', '120']
   ];
   defaults.forEach(function (row) { sheet.appendRow(row); });
 }
@@ -817,10 +856,10 @@ function listPublicSchedule(month) {
 
   var bookedDates = {};
   listBookings({}).forEach(function (booking) {
-    var date = String(booking.date || '').substring(0, 10);
-    if (booking.status === 'confirmed' && date.indexOf(monthKey) === 0) {
-      bookedDates[date] = true;
-    }
+    if (booking.status !== 'confirmed') return;
+    bookingDateKeys_(booking).forEach(function (date) {
+      if (date.indexOf(monthKey) === 0) bookedDates[date] = true;
+    });
   });
 
   var result = {
@@ -830,6 +869,23 @@ function listPublicSchedule(month) {
 
   // ยอมให้ข้อมูลสาธารณะเก่าที่สุดประมาณ 5 นาที เพื่อลดการอ่านชีตซ้ำ
   cache.put(cacheKey, JSON.stringify(result), 300);
+  return result;
+}
+
+function bookingDateKeys_(booking) {
+  var startText = normalizeDateCell_(booking.date);
+  var endText = normalizeDateCell_(booking.endDate) || startText;
+  if (!startText || !endText || endText < startText) return [];
+  var startParts = startText.split('-').map(Number);
+  var endParts = endText.split('-').map(Number);
+  var cursor = new Date(startParts[0], startParts[1] - 1, startParts[2]);
+  var last = new Date(endParts[0], endParts[1] - 1, endParts[2]);
+  var timezone = Session.getScriptTimeZone() || 'Asia/Bangkok';
+  var result = [];
+  while (cursor <= last && result.length < 32) {
+    result.push(Utilities.formatDate(cursor, timezone, 'yyyy-MM-dd'));
+    cursor.setDate(cursor.getDate() + 1);
+  }
   return result;
 }
 
@@ -848,11 +904,12 @@ function normalizePublicScheduleMonth_(month) {
 
 // ตรวจคิวสำหรับหน้า LIFF โดยส่งกลับเฉพาะผลว่าง/ชน ไม่เปิดเผยชื่อลูกค้าหรือรายละเอียดงาน
 // การตรวจนี้เป็นเพียง UX ล่วงหน้า ส่วน submitLiffBooking จะตรวจซ้ำภายใต้ Script Lock ก่อนเขียนจริง
-function checkLiffAvailability(date, startTime, endTime, equipment) {
-  var schedule = normalizeLiffBookingSchedule_(date, startTime, endTime);
+function checkLiffAvailability(date, startTime, endTime, equipment, endDate) {
+  var schedule = normalizeLiffBookingSchedule_(date, startTime, endTime, endDate);
   var requestedEquipment = normalizeLiffEquipment_(equipment);
   var conflict = checkConflicts({
     date: schedule.date,
+    endDate: schedule.endDate,
     startTime: schedule.startTime,
     endTime: schedule.endTime,
     equipment: requestedEquipment
@@ -928,7 +985,7 @@ function normalizeLiffEquipment_(items) {
   });
 }
 
-function normalizeLiffBookingSchedule_(date, startTime, endTime) {
+function normalizeLiffBookingSchedule_(date, startTime, endTime, endDate) {
   var dateText = String(date || '').trim().substring(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateText)) {
     throw new Error('วันที่จัดงานต้องอยู่ในรูปแบบ YYYY-MM-DD');
@@ -955,11 +1012,43 @@ function normalizeLiffBookingSchedule_(date, startTime, endTime) {
   if ((start && !end) || (!start && end)) {
     throw new Error('กรุณาระบุเวลาเริ่มและเวลาสิ้นสุดให้ครบ หรือเว้นว่างทั้งคู่');
   }
-  if (start && end && start >= end) {
-    throw new Error('เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่ม');
+  var normalizedEndDate = String(endDate || dateText).trim().substring(0, 10);
+  validateDateText_(normalizedEndDate, 'วันที่สิ้นสุด');
+  if (normalizedEndDate < dateText) {
+    throw new Error('วันที่สิ้นสุดต้องไม่อยู่ก่อนวันที่เริ่ม');
+  }
+  if (start && end && normalizedEndDate === dateText && start >= end) {
+    throw new Error('งานที่สิ้นสุดหลังเที่ยงคืนต้องเลือกวันที่สิ้นสุดเป็นวันถัดไป');
   }
 
-  return { date: dateText, startTime: start, endTime: end };
+  return { date: dateText, endDate: normalizedEndDate, startTime: start, endTime: end };
+}
+
+function validateDateText_(value, label) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error(label + 'ต้องอยู่ในรูปแบบ YYYY-MM-DD');
+  var parts = value.split('-').map(Number);
+  var parsed = new Date(parts[0], parts[1] - 1, parts[2]);
+  if (parsed.getFullYear() !== parts[0] || parsed.getMonth() !== parts[1] - 1 || parsed.getDate() !== parts[2]) {
+    throw new Error(label + 'ไม่ถูกต้อง');
+  }
+}
+
+function normalizeDateCell_(value) {
+  if (!value) return '';
+  if (Object.prototype.toString.call(value) === '[object Date]' && !isNaN(value.getTime())) {
+    return Utilities.formatDate(value, Session.getScriptTimeZone() || 'Asia/Bangkok', 'yyyy-MM-dd');
+  }
+  var text = String(value).trim().substring(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : '';
+}
+
+function normalizeTimeText_(value) {
+  if (!value) return '';
+  if (Object.prototype.toString.call(value) === '[object Date]' && !isNaN(value.getTime())) {
+    return Utilities.formatDate(value, Session.getScriptTimeZone() || 'Asia/Bangkok', 'HH:mm');
+  }
+  var match = String(value).trim().match(/^(\d{1,2}):(\d{2})/);
+  return match ? String(Number(match[1])).padStart(2, '0') + ':' + match[2] : '';
 }
 
 function normalizeLiffTime_(value, label) {
@@ -988,6 +1077,11 @@ function buildLiffConflictMessage_(conflict) {
 function createBooking(data, actorId) {
   if (!data) throw new Error('ข้อมูลการจองไม่ครบ');
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAMES.BOOKINGS);
+  var schedule = normalizeBookingScheduleData_(data);
+  data.date = schedule.date;
+  data.endDate = schedule.endDate;
+  data.startTime = schedule.startTime;
+  data.endTime = schedule.endTime;
   var id = genId();
   var price = Number(data.price) || 0;
   var initialDeposit = Number(data.deposit) || 0;
@@ -1001,13 +1095,18 @@ function createBooking(data, actorId) {
   // เพื่อให้ Payments เป็นแหล่งข้อมูลการเงินหลักตั้งแต่เริ่มสร้างงาน
   var deposit = 0;
   var remaining = price;
-  sheet.appendRow([
-    id, data.customerId || '', data.customerName || '', data.phone || '', data.line || '',
-    data.venue || '', data.mapLink || '', data.province || '', data.date, data.startTime || '',
-    data.endTime || '', data.jobType || '', data.package || '', price, deposit, remaining,
-    data.remarks || '', JSON.stringify(data.equipment || []), data.status || 'confirmed',
-    new Date(), new Date(), token
-  ]);
+  var values = {
+    id: id, customerId: data.customerId || '', customerName: data.customerName || '',
+    phone: data.phone || '', line: data.line || '', venue: data.venue || '',
+    mapLink: data.mapLink || '', province: data.province || '', date: data.date,
+    endDate: data.endDate, startTime: data.startTime || '', endTime: data.endTime || '',
+    jobType: data.jobType || '', package: data.package || '', price: price, deposit: deposit,
+    remaining: remaining, remarks: data.remarks || '', equipment: JSON.stringify(data.equipment || []),
+    status: data.status || 'confirmed', createdAt: new Date(), updatedAt: new Date(), bookingToken: token
+  };
+  sheet.appendRow(getHeaders(sheet).map(function (header) {
+    return Object.prototype.hasOwnProperty.call(values, header) ? values[header] : '';
+  }));
   logAudit(actorId, 'create_booking', 'Booking:' + id, null, data);
 
   if (initialDeposit > 0) {
@@ -1022,6 +1121,22 @@ function createBooking(data, actorId) {
   return { id: id, bookingToken: token };
 }
 
+function createBookingSafely_(data, actorId) {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('ระบบกำลังบันทึกการจองรายการอื่น กรุณาลองใหม่อีกครั้ง');
+  try {
+    var conflict = checkConflicts(data || {});
+    if (conflict.hasConflict && !(data && data.allowConflict === true)) {
+      throw new Error('ช่วงเวลานี้ชนกับงานเดิม กรุณาตรวจสอบคิวอีกครั้ง');
+    }
+    var safeData = Object.assign({}, data || {});
+    delete safeData.allowConflict;
+    return createBooking(safeData, actorId);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function updateBooking(id, data, actorId) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAMES.BOOKINGS);
   var rowIdx = findRowIndexById(sheet, id);
@@ -1029,6 +1144,20 @@ function updateBooking(id, data, actorId) {
 
   data = data || {};
   var before = getBooking(id);
+  if (data.date !== undefined || data.endDate !== undefined ||
+      data.startTime !== undefined || data.endTime !== undefined) {
+    var mergedSchedule = {
+      date: data.date !== undefined ? data.date : before.date,
+      endDate: data.endDate !== undefined ? data.endDate : before.endDate,
+      startTime: data.startTime !== undefined ? data.startTime : before.startTime,
+      endTime: data.endTime !== undefined ? data.endTime : before.endTime
+    };
+    var normalizedSchedule = normalizeBookingScheduleData_(mergedSchedule);
+    data.date = normalizedSchedule.date;
+    data.endDate = normalizedSchedule.endDate;
+    data.startTime = normalizedSchedule.startTime;
+    data.endTime = normalizedSchedule.endTime;
+  }
   var paymentRecalc = data._paymentRecalc === true;
   var existingPayments = listPayments({ bookingId: id });
 
@@ -1073,6 +1202,31 @@ function updateBooking(id, data, actorId) {
   return { id: id };
 }
 
+function updateBookingSafely_(id, data, actorId) {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('ระบบกำลังแก้ไขการจองรายการอื่น กรุณาลองใหม่อีกครั้ง');
+  try {
+    var before = getBooking(id);
+    if (!before) throw new Error('Booking not found');
+    var candidate = Object.assign({}, before, data || {}, { id: id });
+    var scheduleChanged = data && ['date', 'endDate', 'startTime', 'endTime', 'equipment'].some(function (key) {
+      return Object.prototype.hasOwnProperty.call(data, key);
+    });
+    var confirming = data && data.status === 'confirmed' && before.status !== 'confirmed';
+    if (candidate.status !== 'cancelled' && (scheduleChanged || confirming)) {
+      var conflict = checkConflicts(candidate);
+      if (conflict.hasConflict && !(data && data.allowConflict === true)) {
+        throw new Error('ช่วงเวลานี้ชนกับงานเดิม กรุณาตรวจสอบคิวอีกครั้ง');
+      }
+    }
+    var safeData = Object.assign({}, data || {});
+    delete safeData.allowConflict;
+    return updateBooking(id, safeData, actorId);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function deleteBooking(id, actorId) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAMES.BOOKINGS);
   var rowIdx = findRowIndexById(sheet, id);
@@ -1088,26 +1242,26 @@ function deleteBooking(id, actorId) {
 }
 
 function checkConflicts(data) {
+  data = data || {};
+  var buffers = getBookingBuffers_();
+  var candidate = bookingInterval_(data, buffers);
   // ไม่นับงานที่ยกเลิกแล้วเป็นการชนคิว
   var bookings = listBookings({}).filter(function (b) { return b.status !== 'cancelled'; });
 
-  var sameDate = bookings.filter(function (b) {
-    return b.date && new Date(b.date).toDateString() === new Date(data.date).toDateString() && b.id !== data.id;
-  });
-
-  // ตรวจเฉพาะรายการที่ช่วงเวลาทับกันจริง (เช่น งานเช้า 08:00-11:00 กับงานเย็น 18:00-22:00 ไม่ถือว่าชน)
-  var timeOverlapping = sameDate.filter(function (b) {
-    return timeRangesOverlap(data.startTime, data.endTime, b.startTime, b.endTime);
+  // ใช้กฎช่วงเวลาเดียวกันทั้งงานวันเดียว งานข้ามวัน และงานเต็มวัน
+  var timeOverlapping = bookings.filter(function (b) {
+    if (!b.date || b.id === data.id) return false;
+    var existing = bookingInterval_(b, buffers, true);
+    return candidate.blockedStart < existing.blockedEnd && existing.blockedStart < candidate.blockedEnd;
   });
 
   var dateConflict = timeOverlapping.length > 0;
   var equipmentConflicts = [];
 
-  // อุปกรณ์ยังพิจารณาจากทุกงานในวันเดียวกัน (ไม่ใช่แค่ช่วงเวลาที่ทับกัน) เพราะอุปกรณ์ชุดเดียว
-  // มักใช้ 2 งานในวันเดียวไม่ได้จริงในทางปฏิบัติ (เวลาเดินทาง/เก็บของ)
-  if (sameDate.length && data.equipment && data.equipment.length) {
+  // อุปกรณ์พิจารณาจากงานที่ช่วงกันคิวทับกันเท่านั้น (รวม buffer ก่อน/หลังงาน)
+  if (timeOverlapping.length && data.equipment && data.equipment.length) {
     var usage = {};
-    sameDate.forEach(function (b) {
+    timeOverlapping.forEach(function (b) {
       (b.equipment || []).forEach(function (item) {
         usage[item.name] = (usage[item.name] || 0) + (Number(item.qty) || 1);
       });
@@ -1137,11 +1291,65 @@ function checkConflicts(data) {
   };
 }
 
-// ตรวจว่าช่วงเวลาสองช่วงทับกันหรือไม่ (รูปแบบ "HH:MM")
-// ถ้าข้อมูลเวลาไม่ครบฝั่งใดฝั่งหนึ่ง ถือว่าเป็นทั้งวันไว้ก่อนเพื่อความปลอดภัย (กันแจ้งเตือนพลาด)
-function timeRangesOverlap(startA, endA, startB, endB) {
-  if (!startA || !endA || !startB || !endB) return true;
-  return startA < endB && startB < endA;
+function normalizeBookingScheduleData_(data, allowLegacyOvernight) {
+  var date = normalizeDateCell_(data.date);
+  if (!date) throw new Error('วันที่จัดงานไม่ถูกต้อง');
+  var endDate = normalizeDateCell_(data.endDate) || date;
+  validateDateText_(date, 'วันที่จัดงาน');
+  validateDateText_(endDate, 'วันที่สิ้นสุด');
+  if (endDate < date) throw new Error('วันที่สิ้นสุดต้องไม่อยู่ก่อนวันที่เริ่ม');
+
+  var start = normalizeTimeText_(data.startTime);
+  var end = normalizeTimeText_(data.endTime);
+  if ((start && !end) || (!start && end)) {
+    throw new Error('กรุณาระบุเวลาเริ่มและเวลาสิ้นสุดให้ครบ หรือเว้นว่างทั้งคู่');
+  }
+  if (start && end && endDate === date && start >= end) {
+    if (allowLegacyOvernight) endDate = addDaysToDateText_(date, 1);
+    else throw new Error('งานที่สิ้นสุดหลังเที่ยงคืนต้องเลือกวันที่สิ้นสุดเป็นวันถัดไป');
+  }
+  return { date: date, endDate: endDate, startTime: start, endTime: end };
+}
+
+function addDaysToDateText_(dateText, days) {
+  var parts = dateText.split('-').map(Number);
+  var date = new Date(parts[0], parts[1] - 1, parts[2] + days);
+  return Utilities.formatDate(date, Session.getScriptTimeZone() || 'Asia/Bangkok', 'yyyy-MM-dd');
+}
+
+function getBookingBuffers_() {
+  var settings = getSettings();
+  var before = Number(settings.bookingBufferBeforeMinutes);
+  var after = Number(settings.bookingBufferAfterMinutes);
+  return {
+    beforeMinutes: isFinite(before) && before >= 0 ? before : 120,
+    afterMinutes: isFinite(after) && after >= 0 ? after : 120
+  };
+}
+
+function bookingInterval_(data, buffers, allowLegacyOvernight) {
+  var schedule = normalizeBookingScheduleData_(data, allowLegacyOvernight);
+  var startParts = schedule.date.split('-').map(Number);
+  var endParts = schedule.endDate.split('-').map(Number);
+  var startTime = schedule.startTime ? schedule.startTime.split(':').map(Number) : [0, 0];
+  var endTime = schedule.endTime ? schedule.endTime.split(':').map(Number) : [0, 0];
+  var start = new Date(startParts[0], startParts[1] - 1, startParts[2], startTime[0], startTime[1], 0, 0);
+  var end;
+  if (!schedule.startTime) {
+    // ไม่กรอกเวลา = กันคิวเต็มวัน รวมทุกวันที่ระบุ
+    end = new Date(endParts[0], endParts[1] - 1, endParts[2] + 1, 0, 0, 0, 0);
+  } else {
+    end = new Date(endParts[0], endParts[1] - 1, endParts[2], endTime[0], endTime[1], 0, 0);
+  }
+  if (end <= start) throw new Error('ช่วงเวลาสิ้นสุดต้องอยู่หลังช่วงเวลาเริ่ม');
+
+  buffers = buffers || getBookingBuffers_();
+  return {
+    start: start.getTime(),
+    end: end.getTime(),
+    blockedStart: start.getTime() - buffers.beforeMinutes * 60000,
+    blockedEnd: end.getTime() + buffers.afterMinutes * 60000
+  };
 }
 
 // ---------- EQUIPMENT ----------
@@ -1365,8 +1573,15 @@ function trashDriveFile_(fileId) {
   }
 }
 
-function checkAvailability(date, items) {
-  var conflict = checkConflicts({ date: date, equipment: items, id: null });
+function checkAvailability(date, items, startTime, endTime, endDate) {
+  var conflict = checkConflicts({
+    date: date,
+    endDate: endDate || date,
+    startTime: startTime || '',
+    endTime: endTime || '',
+    equipment: items,
+    id: null
+  });
   return conflict.equipmentConflicts;
 }
 
@@ -2031,7 +2246,7 @@ function listAuditLog(params) {
 function submitLiffBooking(idToken, data) {
   if (!data || !data.date) throw new Error('กรุณาระบุวันที่จัดงาน');
 
-  var schedule = normalizeLiffBookingSchedule_(data.date, data.startTime, data.endTime);
+  var schedule = normalizeLiffBookingSchedule_(data.date, data.startTime, data.endTime, data.endDate);
   var profile = prepareLineProfile_(verifyLineIdToken(idToken)); // throws ถ้า token ไม่ถูกต้อง
   upsertMember(profile);
 
@@ -2048,6 +2263,7 @@ function submitLiffBooking(idToken, data) {
     var requestedEquipment = normalizeLiffEquipment_(data.equipment);
     var conflict = checkConflicts({
       date: schedule.date,
+      endDate: schedule.endDate,
       startTime: schedule.startTime,
       endTime: schedule.endTime,
       equipment: requestedEquipment
@@ -2090,6 +2306,7 @@ function submitLiffBooking(idToken, data) {
       mapLink: data.mapLink || '',
       province: data.province || '',
       date: schedule.date,
+      endDate: schedule.endDate,
       startTime: schedule.startTime,
       endTime: schedule.endTime,
       jobType: data.jobType || 'Custom',
@@ -2203,7 +2420,9 @@ function buildBookingConfirmationFlex(booking, settings) {
       body: {
         type: 'box', layout: 'vertical', spacing: 'md', paddingAll: 'lg',
         contents: [
-          flexRow('วันที่', formatThaiDate(booking.date)),
+          flexRow('วันที่', formatThaiDate(booking.date) +
+            (booking.endDate && normalizeDateCell_(booking.endDate) !== normalizeDateCell_(booking.date)
+              ? ' ถึง ' + formatThaiDate(booking.endDate) : '')),
           flexRow('เวลา', (booking.startTime || '-') + ' - ' + (booking.endTime || '-')),
           flexRow('สถานที่', booking.venue || '-'),
           flexRow('ประเภทงาน', jobTypeLabelTh(booking.jobType)),

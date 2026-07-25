@@ -158,6 +158,12 @@
         </div>
         <input id="field-date" type="date"
           class="w-full bg-navy border border-gold/10 rounded-lg px-3 py-3 text-base text-gray-100 focus:outline-none focus:border-gold/40">
+        <div class="mt-3">
+          <label class="text-sm text-gray-500 block mb-1">วันที่สิ้นสุด</label>
+          <input id="field-endDate" type="date"
+            class="w-full bg-navy border border-gold/10 rounded-lg px-3 py-3 text-base text-gray-100 focus:outline-none focus:border-gold/40">
+          <p class="mt-1 text-[11px] text-gray-500">ถ้างานเลิกหลังเที่ยงคืน ให้เลือกเป็นวันถัดไป</p>
+        </div>
         <div id="availability-panel" class="mt-3 rounded-xl border border-gold/10 bg-navy/60 p-3">
           <div class="flex items-center justify-between gap-2">
             <button id="availability-prev" type="button" class="availability-month-button" aria-label="เดือนก่อนหน้า">
@@ -537,16 +543,19 @@
   function selectAvailableDate(date) {
     if (!isValidDateKey(date) || date < localDateKey()) return;
     const data = availabilityCache[monthKeyFromDateKey(date)];
-    if (data && (data.bookedDates || []).map(function (value) {
+    const hasConfirmedJob = data && (data.bookedDates || []).map(function (value) {
       return String(value).substring(0, 10);
-    }).indexOf(date) !== -1) {
-      setAvailabilityStatus('วันที่นี้มีงานยืนยันแล้ว กรุณาเลือกวันอื่น', 'error');
-      return;
-    }
+    }).indexOf(date) !== -1;
     document.getElementById('field-date').value = date;
+    document.getElementById('field-endDate').value = date;
     availabilityMonth = monthKeyFromDateKey(date);
     renderAvailabilityCalendar(availabilityMonth, data ? data.bookedDates : []);
-    setAvailabilityStatus('เลือกวันที่ ' + date + ' แล้ว', 'success');
+    setAvailabilityStatus(
+      hasConfirmedJob
+        ? 'วันที่นี้มีงานบางช่วง โปรดระบุเวลาเพื่อให้ระบบตรวจช่วงที่ยังว่าง'
+        : 'เลือกวันที่ ' + date + ' แล้ว',
+      hasConfirmedJob ? 'warning' : 'success'
+    );
   }
 
   function changeAvailabilityMonth(delta) {
@@ -557,11 +566,14 @@
 
   function applyInitialBookingDate() {
     const field = document.getElementById('field-date');
+    const endDateField = document.getElementById('field-endDate');
     if (!field) return;
     field.min = localDateKey();
+    if (endDateField) endDateField.min = localDateKey();
     const requested = getPageParam('date');
     if (requested && isValidDateKey(requested) && requested >= field.min) {
       field.value = requested;
+      if (endDateField) endDateField.value = requested;
       availabilityMonth = monthKeyFromDateKey(requested);
       return;
     }
@@ -811,6 +823,7 @@
       venue: document.getElementById('field-venue').value.trim(),
       province: document.getElementById('field-province').value,
       date: document.getElementById('field-date').value,
+      endDate: document.getElementById('field-endDate').value,
       startTime: document.getElementById('field-startTime').value,
       endTime: document.getElementById('field-endTime').value,
       jobType: selectedJobType,
@@ -827,16 +840,21 @@
       return;
     }
 
-    const selectedMonthData = availabilityCache[monthKeyFromDateKey(data.date)];
-    if (selectedMonthData && (selectedMonthData.bookedDates || []).map(function (date) {
-      return String(date).substring(0, 10);
-    }).indexOf(data.date) !== -1) {
-      toast('warning', 'วันที่นี้มีงานยืนยันแล้ว กรุณาเลือกวันอื่น');
-      return;
-    }
-
     if (!data.customerName || !data.phone || !data.date) {
       toast('error', 'กรุณากรอกชื่อ เบอร์โทร และวันที่จัดงาน');
+      return;
+    }
+    if (!data.endDate) data.endDate = data.date;
+    if (data.endDate < data.date) {
+      toast('error', 'วันที่สิ้นสุดต้องไม่อยู่ก่อนวันที่เริ่ม');
+      return;
+    }
+    if ((data.startTime && !data.endTime) || (!data.startTime && data.endTime)) {
+      toast('error', 'กรุณาระบุเวลาเริ่มและเวลาสิ้นสุดให้ครบ หรือเว้นว่างทั้งคู่');
+      return;
+    }
+    if (data.startTime && data.endTime && data.endDate === data.date && data.endTime <= data.startTime) {
+      toast('error', 'ถ้างานสิ้นสุดหลังเที่ยงคืน กรุณาเลือกวันที่สิ้นสุดเป็นวันถัดไป');
       return;
     }
 
@@ -848,6 +866,7 @@
     try {
       const availability = await callApi('checkLiffAvailability', {
         date: data.date,
+        endDate: data.endDate,
         startTime: data.startTime,
         endTime: data.endTime,
         equipment: data.equipment
@@ -931,7 +950,11 @@
       applyInitialBookingDate();
       document.getElementById('field-mapLink').addEventListener('input', handleMapLinkInput);
       document.getElementById('field-date').addEventListener('change', handleDateChange);
-      ['field-date', 'field-startTime', 'field-endTime'].forEach(function (id) {
+      document.getElementById('field-date').addEventListener('change', function () {
+        const endDate = document.getElementById('field-endDate');
+        if (!endDate.value || endDate.value < this.value) endDate.value = this.value;
+      });
+      ['field-date', 'field-endDate', 'field-startTime', 'field-endTime'].forEach(function (id) {
         document.getElementById(id).addEventListener('input', clearServerAvailabilityStatus);
       });
       document.getElementById('availability-prev').onclick = function () { changeAvailabilityMonth(-1); };
