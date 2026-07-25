@@ -26,6 +26,18 @@ async function renderSettings() {
       </div>
 
       <div class="bg-navy-light rounded-2xl p-4 border border-gold/10 mb-4">
+        <h3 class="text-base font-semibold text-gold mb-2"><i class="fa-solid fa-shield-halved mr-1.5"></i>ป้องกันข้อมูลสูญหาย</h3>
+        <p class="text-sm text-gray-400 mb-3">สำรอง Google Sheets ทั้งระบบไปยังโฟลเดอร์ Bawmusic Backups และส่งออกไฟล์ Excel ได้</p>
+        <div id="backup-status" class="rounded-xl bg-navy p-3 text-sm text-gray-300 mb-3"><i class="fa-solid fa-spinner fa-spin mr-1.5"></i>กำลังตรวจสอบสถานะ...</div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <button onclick="window.__installWeeklyBackup()" class="rounded-xl border border-gold/30 bg-gold/10 px-3 py-3 text-sm font-medium text-gold"><i class="fa-solid fa-calendar-check mr-1"></i>ติดตั้งสำรองรายสัปดาห์</button>
+          <button onclick="window.__createBackupNow()" class="rounded-xl border border-gold/30 bg-gold/10 px-3 py-3 text-sm font-medium text-gold"><i class="fa-solid fa-copy mr-1"></i>สำรองตอนนี้</button>
+          <button onclick="window.__exportFullBackup()" class="rounded-xl bg-gold px-3 py-3 text-sm font-semibold text-navy-dark"><i class="fa-solid fa-file-excel mr-1"></i>ดาวน์โหลดข้อมูลทั้งระบบ</button>
+          <button onclick="window.__confirmVersionHistory()" class="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-3 py-3 text-sm font-medium text-emerald-300"><i class="fa-solid fa-clock-rotate-left mr-1"></i>ยืนยัน Version History</button>
+        </div>
+      </div>
+
+      <div class="bg-navy-light rounded-2xl p-4 border border-gold/10 mb-4">
         <h3 class="text-base font-semibold text-gold mb-3"><i class="fa-solid fa-mobile-screen-button mr-1.5"></i>ติดตั้งเป็นแอป</h3>
         <p class="text-base text-gray-400 mb-3">ติดตั้ง Bawmusic ลงหน้าจอหลักมือถือ ใช้งานได้เหมือนแอปจริงและออฟไลน์ได้บางส่วน</p>
         <button onclick="window.__app.installApp()" class="w-full bg-gold text-navy-dark text-base font-semibold rounded-xl py-3">
@@ -66,6 +78,7 @@ async function renderSettings() {
     Utils.fadeIn(container);
 
     loadTemplatesIntoSettings();
+    loadBackupStatus();
   } catch (err) {
     container.innerHTML = errorState(err);
   }
@@ -107,6 +120,93 @@ window.__saveSettings = async () => {
     Utils.closeLoading();
     Utils.toast('error', 'เกิดข้อผิดพลาด');
   }
+};
+
+
+function formatBackupDate_(value) {
+  if (!value) return 'ยังไม่มี';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('th-TH');
+}
+
+async function loadBackupStatus() {
+  const el = document.getElementById('backup-status');
+  if (!el) return;
+  try {
+    const status = await BawmusicAPI.getBackupStatus();
+    const triggerText = status.weeklyTriggerInstalled
+      ? `<span class="text-emerald-300"><i class="fa-solid fa-circle-check mr-1"></i>ติดตั้งแล้ว</span><span class="text-gray-500"> — ${status.schedule}</span>`
+      : '<span class="text-amber-300"><i class="fa-solid fa-triangle-exclamation mr-1"></i>ยังไม่ได้ติดตั้ง</span>';
+    const historyText = status.versionHistoryCheckedAt
+      ? `<span class="text-emerald-300">ตรวจแล้ว ${formatBackupDate_(status.versionHistoryCheckedAt)}</span>`
+      : '<span class="text-amber-300">รอยืนยันการตรวจด้วยตนเอง</span>';
+    el.innerHTML = `<div class="space-y-2">
+      <div><span class="text-gray-500">สำรองรายสัปดาห์:</span> ${triggerText}</div>
+      <div><span class="text-gray-500">สำรองล่าสุด:</span> ${formatBackupDate_(status.lastBackupAt)}</div>
+      <div><span class="text-gray-500">Version History:</span> ${historyText}</div>
+      <a href="${status.folderUrl}" target="_blank" rel="noopener" class="inline-flex items-center text-gold"><i class="fa-brands fa-google-drive mr-1"></i>เปิดโฟลเดอร์สำรอง</a>
+    </div>`;
+  } catch (err) {
+    el.innerHTML = `<span class="text-rose-300">ตรวจสถานะไม่สำเร็จ: ${err.message || err}</span>`;
+  }
+}
+
+window.__installWeeklyBackup = async () => {
+  Utils.loading('กำลังติดตั้ง Trigger...');
+  try {
+    await BawmusicAPI.installWeeklyBackupTrigger();
+    Utils.closeLoading(); Utils.toast('success', 'ติดตั้งการสำรองทุกสัปดาห์แล้ว');
+    await loadBackupStatus();
+  } catch (err) { Utils.closeLoading(); Utils.toast('error', err.message || 'ติดตั้ง Trigger ไม่สำเร็จ'); }
+};
+
+window.__createBackupNow = async () => {
+  Utils.loading('กำลังสำรอง Google Sheets...');
+  try {
+    const backup = await BawmusicAPI.createBackupNow();
+    Utils.closeLoading();
+    const result = await Swal.fire({
+      icon: 'success', title: 'สำรองข้อมูลสำเร็จ', text: backup.fileName,
+      showCancelButton: true, confirmButtonText: 'เปิดไฟล์สำรอง', cancelButtonText: 'ปิด',
+      background: Utils.swalBg(), color: Utils.swalColor()
+    });
+    if (result.isConfirmed && backup.fileUrl) window.open(backup.fileUrl, '_blank', 'noopener');
+    await loadBackupStatus();
+  } catch (err) { Utils.closeLoading(); Utils.toast('error', err.message || 'สำรองข้อมูลไม่สำเร็จ'); }
+};
+
+window.__exportFullBackup = async () => {
+  Utils.loading('กำลังสร้างไฟล์ Excel ทั้งระบบ...');
+  try {
+    const exported = await BawmusicAPI.exportFullBackup();
+    const binary = atob(exported.base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const blob = new Blob([bytes], { type: exported.mimeType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url; link.download = exported.fileName;
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    Utils.closeLoading(); Utils.toast('success', 'ดาวน์โหลดข้อมูลทั้งระบบแล้ว');
+    await loadBackupStatus();
+  } catch (err) { Utils.closeLoading(); Utils.toast('error', err.message || 'ส่งออกข้อมูลไม่สำเร็จ'); }
+};
+
+window.__confirmVersionHistory = async () => {
+  const result = await Swal.fire({
+    icon: 'question', title: 'ตรวจ Version History แล้วหรือยัง?',
+    html: 'เปิด Google Sheets → <b>ไฟล์ → ประวัติเวอร์ชัน → ดูประวัติเวอร์ชัน</b><br>และยืนยันว่ามองเห็นเวอร์ชันย้อนหลัง ก่อนกดปุ่มยืนยัน',
+    showCancelButton: true, confirmButtonText: 'ตรวจแล้ว ยืนยัน', cancelButtonText: 'ยังไม่ได้ตรวจ',
+    confirmButtonColor: '#10b981', background: Utils.swalBg(), color: Utils.swalColor()
+  });
+  if (!result.isConfirmed) return;
+  Utils.loading('กำลังบันทึกผลตรวจ...');
+  try {
+    await BawmusicAPI.confirmVersionHistoryCheck();
+    Utils.closeLoading(); Utils.toast('success', 'บันทึกการตรวจ Version History แล้ว');
+    await loadBackupStatus();
+  } catch (err) { Utils.closeLoading(); Utils.toast('error', err.message || 'บันทึกผลตรวจไม่สำเร็จ'); }
 };
 
 async function loadTemplatesIntoSettings() {
