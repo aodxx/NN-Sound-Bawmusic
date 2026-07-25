@@ -62,16 +62,22 @@ function handleRequest(e, method) {
       return jsonResponse({ success: false, error: 'Missing action parameter' }, 400);
     }
 
-    // ตรวจ session ก่อนแตะ Spreadsheet เพื่อให้ session หมดอายุแล้วตอบกลับได้ทันที
+    // จำกัดจำนวนคำขอสาธารณะก่อนแตะฐานข้อมูลหรือบริการภายนอก
+    if (PUBLIC_ACTIONS.indexOf(action) !== -1) {
+      enforcePublicRateLimit_(action, params);
+    }
+
+    // ตัวตนผู้แก้ไขต้องมาจาก Session ฝั่ง Backend เท่านั้น ห้ามเชื่อ actorId จาก Browser
     if (PUBLIC_ACTIONS.indexOf(action) === -1) {
-      requireSession(params.sessionToken);
+      var sessionUser = requireSession(params.sessionToken);
+      params.actorId = sessionUser.userId;
     }
 
     // createSession ไม่ควรถูกบล็อกด้วยการเริ่มฐานข้อมูล
     if (action !== 'createSession') ensureDatabaseInitialized();
 
     switch (action) {
-      case 'createSession': result = createSession(params.accessCode); break;
+      case 'createSession': result = createSession(params.username, params.password); break;
       // Bookings
       case 'listBookings': result = listBookings(params); break;
       case 'getBooking': result = getBooking(params.id); break;
@@ -161,19 +167,162 @@ function jsonResponse(obj, code) {
   return output;
 }
 
-// ออก session ชั่วคราวจากรหัสที่เก็บใน Script Properties
-function createSession(accessCode) {
-  var expected = PropertiesService.getScriptProperties().getProperty('APP_ACCESS_CODE');
-  if (!expected) throw new Error('ยังไม่ได้ตั้งค่า APP_ACCESS_CODE ใน Script Properties');
-  if (!accessCode || String(accessCode) !== String(expected)) throw new Error('รหัสเข้าใช้งานไม่ถูกต้อง');
+// ---------- AUTHENTICATION / RATE LIMIT ----------
+// บัญชีเก็บเป็น JSON ใน Script Property "ADMIN_USERS_JSON" โดยไม่เก็บรหัสผ่านจริง
+function createSession(username, password) {
+  var normalizedUsername = normalizeUsername_(username);
+  if (!normalizedUsername || !password) throw new Error('กรุณากรอกชื่อผู้ใช้และรหัสผ่าน');
+
+  var users = getAdminUsers_();
+  var user = null;
+  for (var i = 0; i < users.length; i++) {
+    if (normalizeUsername_(users[i].username) === normalizedUsername && users[i].active !== false) {
+      user = users[i];
+      break;
+    }
+  }
+
+  // ใช้ข้อความเดียวกันเพื่อไม่เปิดเผยว่าชื่อผู้ใช้ใดมีอยู่จริง
+  if (!user || !constantTimeEquals_(hashPassword_(String(password), user.salt), user.passwordHash)) {
+    throw new Error('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
+  }
+
   var token = Utilities.getUuid() + Utilities.getUuid().replace(/-/g, '');
-  CacheService.getScriptCache().put('session_' + token, 'admin', 21600);
-  return { sessionToken: token, expiresIn: 21600 };
+  var session = {
+    userId: String(user.userId),
+    username: normalizedUsername,
+    displayName: String(user.displayName || user.username),
+    role: String(user.role || 'admin'),
+    issuedAt: new Date().toISOString()
+  };
+  CacheService.getScriptCache().put('session_' + token, JSON.stringify(session), 21600);
+  return { sessionToken: token, expiresIn: 21600, user: session };
 }
 
 function requireSession(token) {
-  if (!token || CacheService.getScriptCache().get('session_' + token) !== 'admin') {
-    throw new Error('เซสชันหมดอายุ กรุณาใส่รหัสเข้าใช้งานใหม่');
+  var raw = token ? CacheService.getScriptCache().get('session_' + token) : '';
+  if (!raw) throw new Error('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
+  try {
+    var session = JSON.parse(raw);
+    if (!session.userId || !session.role) throw new Error('invalid');
+    return session;
+  } catch (err) {
+    CacheService.getScriptCache().remove('session_' + token);
+    throw new Error('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
+  }
+}
+
+function getAdminUsers_() {
+  var raw = PropertiesService.getScriptProperties().getProperty('ADMIN_USERS_JSON');
+  if (!raw) throw new Error('ยังไม่ได้ตั้งค่าบัญชีผู้ดูแลระบบ');
+  try {
+    var users = JSON.parse(raw);
+    if (!Array.isArray(users) || !users.length) throw new Error('empty');
+    return users;
+  } catch (err) {
+    throw new Error('ข้อมูลบัญชีผู้ดูแลระบบไม่ถูกต้อง');
+  }
+}
+
+// เรียกครั้งเดียวจาก Apps Script Editor หลังตั้ง BOOTSTRAP_ADMIN_* ใน Script Properties
+// ระบบจะลบรหัสผ่านชั่วคราวทันทีเมื่อสร้างบัญชีสำเร็จ
+function initializeAdminUserFromProperties() {
+  var props = PropertiesService.getScriptProperties();
+  var username = normalizeUsername_(props.getProperty('BOOTSTRAP_ADMIN_USERNAME'));
+  var password = props.getProperty('BOOTSTRAP_ADMIN_PASSWORD');
+  var displayName = props.getProperty('BOOTSTRAP_ADMIN_DISPLAY_NAME') || username;
+  if (!username || !password) throw new Error('กรุณาตั้ง BOOTSTRAP_ADMIN_USERNAME และ BOOTSTRAP_ADMIN_PASSWORD ก่อน');
+
+  var salt = Utilities.getUuid().replace(/-/g, '');
+  var user = {
+    userId: 'usr_' + Utilities.getUuid().replace(/-/g, ''),
+    username: username,
+    displayName: displayName,
+    passwordHash: hashPassword_(password, salt),
+    salt: salt,
+    role: 'admin',
+    active: true
+  };
+  props.setProperty('ADMIN_USERS_JSON', JSON.stringify([user]));
+  props.deleteProperty('BOOTSTRAP_ADMIN_PASSWORD');
+  return { success: true, userId: user.userId, username: user.username };
+}
+
+function normalizeUsername_(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function hashPassword_(password, salt) {
+  var digest = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    String(salt) + ':' + String(password),
+    Utilities.Charset.UTF_8
+  );
+  return Utilities.base64EncodeWebSafe(digest);
+}
+
+function constantTimeEquals_(left, right) {
+  left = String(left || '');
+  right = String(right || '');
+  var mismatch = left.length ^ right.length;
+  var length = Math.max(left.length, right.length);
+  for (var i = 0; i < length; i++) {
+    mismatch |= (left.charCodeAt(i % Math.max(1, left.length)) || 0) ^
+      (right.charCodeAt(i % Math.max(1, right.length)) || 0);
+  }
+  return mismatch === 0;
+}
+
+function enforcePublicRateLimit_(action, params) {
+  var limits = {
+    createSession: { limit: 8, windowSeconds: 300 },
+    submitLiffBooking: { limit: 8, windowSeconds: 300 },
+    checkLiffAvailability: { limit: 30, windowSeconds: 60 },
+    verifyAndUpsertMember: { limit: 15, windowSeconds: 300 },
+    verifyLineToken: { limit: 20, windowSeconds: 300 },
+    getBookingByToken: { limit: 30, windowSeconds: 300 },
+    listPublicEquipment: { limit: 60, windowSeconds: 60 },
+    getMyBookings: { limit: 30, windowSeconds: 300 },
+    listPublicSchedule: { limit: 60, windowSeconds: 60 }
+  };
+  var config = limits[action];
+  if (!config) return;
+
+  var identity = getPublicRateIdentity_(action, params);
+  incrementRateCounter_('global:' + action, Math.max(config.limit * 10, 100), config.windowSeconds);
+  incrementRateCounter_(action + ':' + identity, config.limit, config.windowSeconds);
+}
+
+function getPublicRateIdentity_(action, params) {
+  var raw = '';
+  if (action === 'createSession') raw = normalizeUsername_(params.username);
+  else if (params.idToken) raw = String(params.idToken);
+  else if (params.token) raw = String(params.token);
+  else if (params.month) raw = String(params.month);
+  else raw = 'anonymous';
+  return shortHash_(raw || 'anonymous');
+}
+
+function shortHash_(value) {
+  var digest = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    String(value),
+    Utilities.Charset.UTF_8
+  );
+  return Utilities.base64EncodeWebSafe(digest).substring(0, 24);
+}
+
+function incrementRateCounter_(key, limit, windowSeconds) {
+  var cache = CacheService.getScriptCache();
+  var cacheKey = 'rate_' + shortHash_(key);
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(3000)) throw new Error('ระบบกำลังมีคำขอจำนวนมาก กรุณาลองใหม่');
+  try {
+    var count = Number(cache.get(cacheKey) || 0) + 1;
+    if (count > limit) throw new Error('มีคำขอมากเกินไป กรุณารอสักครู่แล้วลองใหม่');
+    cache.put(cacheKey, String(count), windowSeconds);
+  } finally {
+    lock.releaseLock();
   }
 }
 
