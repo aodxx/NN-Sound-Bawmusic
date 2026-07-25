@@ -224,28 +224,50 @@ function getAdminUsers_() {
   }
 }
 
-// เรียกครั้งเดียวจาก Apps Script Editor หลังตั้ง BOOTSTRAP_ADMIN_* ใน Script Properties
-// ระบบจะลบรหัสผ่านชั่วคราวทันทีเมื่อสร้างบัญชีสำเร็จ
-function initializeAdminUserFromProperties() {
+// เรียกจาก Apps Script Editor หลังตั้ง BOOTSTRAP_ADMIN_* ใน Script Properties
+// เรียกซ้ำได้เพื่อเพิ่ม/เปลี่ยนรหัสผู้ใช้ทีละคน และลบรหัสผ่านชั่วคราวทันที
+function upsertAdminUserFromProperties() {
   var props = PropertiesService.getScriptProperties();
   var username = normalizeUsername_(props.getProperty('BOOTSTRAP_ADMIN_USERNAME'));
   var password = props.getProperty('BOOTSTRAP_ADMIN_PASSWORD');
   var displayName = props.getProperty('BOOTSTRAP_ADMIN_DISPLAY_NAME') || username;
   if (!username || !password) throw new Error('กรุณาตั้ง BOOTSTRAP_ADMIN_USERNAME และ BOOTSTRAP_ADMIN_PASSWORD ก่อน');
 
+  var users = [];
+  var existingRaw = props.getProperty('ADMIN_USERS_JSON');
+  if (existingRaw) {
+    try {
+      users = JSON.parse(existingRaw);
+      if (!Array.isArray(users)) throw new Error('invalid');
+    } catch (err) {
+      throw new Error('ข้อมูล ADMIN_USERS_JSON เดิมไม่ถูกต้อง จึงยังไม่แก้ไข');
+    }
+  }
+
+  var existingIndex = -1;
+  for (var i = 0; i < users.length; i++) {
+    if (normalizeUsername_(users[i].username) === username) {
+      existingIndex = i;
+      break;
+    }
+  }
+
   var salt = Utilities.getUuid().replace(/-/g, '');
   var user = {
-    userId: 'usr_' + Utilities.getUuid().replace(/-/g, ''),
+    userId: existingIndex >= 0 ? String(users[existingIndex].userId) : 'usr_' + Utilities.getUuid().replace(/-/g, ''),
     username: username,
     displayName: displayName,
     passwordHash: hashPassword_(password, salt),
     salt: salt,
-    role: 'admin',
+    role: existingIndex >= 0 ? String(users[existingIndex].role || 'admin') : 'admin',
     active: true
   };
-  props.setProperty('ADMIN_USERS_JSON', JSON.stringify([user]));
+  if (existingIndex >= 0) users[existingIndex] = user;
+  else users.push(user);
+
+  props.setProperty('ADMIN_USERS_JSON', JSON.stringify(users));
   props.deleteProperty('BOOTSTRAP_ADMIN_PASSWORD');
-  return { success: true, userId: user.userId, username: user.username };
+  return { success: true, userId: user.userId, username: user.username, totalUsers: users.length };
 }
 
 function normalizeUsername_(value) {
