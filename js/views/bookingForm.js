@@ -42,6 +42,7 @@ async function openBookingForm(id, prefillDate) {
       mapLink: existing?.mapLink || '',
       province: existing?.province || '',
       date: existing?.date && Utils.parseDate(existing.date) ? (() => { const d = Utils.parseDate(existing.date); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })() : (prefillDate || ''),
+      endDate: existing?.endDate && Utils.parseDate(existing.endDate) ? (() => { const d = Utils.parseDate(existing.endDate); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })() : (existing?.date && Utils.parseDate(existing.date) ? (() => { const d = Utils.parseDate(existing.date); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })() : (prefillDate || '')),
       startTime: existing?.startTime || '',
       endTime: existing?.endTime || '',
       jobType: existing?.jobType || 'Wedding',
@@ -148,7 +149,10 @@ function paintBookingForm(equipment, templates) {
       <section class="bg-navy-light rounded-2xl p-4 border border-gold/10 shadow-sm shadow-black/5">
         <h3 class="text-base font-semibold text-gold mb-3"><i class="fa-regular fa-calendar mr-1.5"></i>วันและเวลา</h3>
         <div class="space-y-2.5">
-          ${formInput('date', 'วันที่จัดงาน', s.date, 'date')}
+          <div class="grid grid-cols-2 gap-2.5">
+            ${formInput('date', 'วันที่เริ่มงาน', s.date, 'date')}
+            ${formInput('endDate', 'วันที่สิ้นสุด', s.endDate, 'date')}
+          </div>
           <div class="grid grid-cols-2 gap-2.5">
             ${formInput('startTime', 'เวลาเริ่ม', s.startTime, 'time')}
             ${formInput('endTime', 'เวลาสิ้นสุด', s.endTime, 'time')}
@@ -292,6 +296,11 @@ function equipmentCheckRow(e) {
 
 function updateField(field, value) {
   __bookingFormState[field] = value;
+  if (field === 'date' && (!__bookingFormState.endDate || __bookingFormState.endDate < value)) {
+    __bookingFormState.endDate = value;
+    const endDateField = document.getElementById('field-endDate');
+    if (endDateField) endDateField.value = value;
+  }
   if (field === 'price' || field === 'deposit') {
     const paid = __bookingFormState.paymentSummary && __bookingFormState.paymentSummary.totalPaid !== undefined
       ? Number(__bookingFormState.paymentSummary.totalPaid) || 0
@@ -473,16 +482,36 @@ async function submitBookingForm() {
     Utils.toast('error', 'กรุณากรอกชื่อลูกค้าและวันที่');
     return;
   }
+  if (!s.endDate) s.endDate = s.date;
+  if (s.endDate < s.date) {
+    Utils.toast('error', 'วันที่สิ้นสุดต้องไม่อยู่ก่อนวันที่เริ่ม');
+    return;
+  }
+  if ((s.startTime && !s.endTime) || (!s.startTime && s.endTime)) {
+    Utils.toast('error', 'กรุณาระบุเวลาเริ่มและเวลาสิ้นสุดให้ครบ หรือเว้นว่างทั้งคู่');
+    return;
+  }
+  if (s.startTime && s.endTime && s.endDate === s.date && s.endTime <= s.startTime) {
+    Utils.toast('error', 'ถ้างานสิ้นสุดหลังเที่ยงคืน กรุณาเลือกวันที่สิ้นสุดเป็นวันถัดไป');
+    return;
+  }
 
   Utils.loading('กำลังตรวจสอบคิว...');
   try {
-    const conflicts = await BawmusicAPI.checkConflicts({ id: s.id, date: s.date, equipment: s.equipment });
+    const conflicts = await BawmusicAPI.checkConflicts({
+      id: s.id,
+      date: s.date,
+      endDate: s.endDate,
+      startTime: s.startTime,
+      endTime: s.endTime,
+      equipment: s.equipment
+    });
 
     if (conflicts.hasConflict) {
       Utils.closeLoading();
       let msg = '';
       if (conflicts.dateConflict) {
-        msg += `<p style="margin-bottom:8px;">⚠️ มีงานอื่นในวันเดียวกัน: ${conflicts.conflictingBookings.map(b => b.customerName).join(', ')}</p>`;
+        msg += `<p style="margin-bottom:8px;">⚠️ มีงานอื่นในช่วงเวลานี้ (รวมเวลาเตรียม/เก็บงาน): ${conflicts.conflictingBookings.map(b => b.customerName).join(', ')}</p>`;
       }
       if (conflicts.equipmentConflicts.length) {
         msg += conflicts.equipmentConflicts.map(c => `<p style="margin-bottom:4px;">🔧 ${c.name}: ต้องการ ${c.requested} แต่มี ${c.available} (จองแล้ว ${c.alreadyBooked})</p>`).join('');
@@ -493,6 +522,7 @@ async function submitBookingForm() {
         confirmButtonColor: '#22d3ee', background: Utils.swalBg(), color: Utils.swalColor()
       });
       if (!proceed.isConfirmed) return;
+      s.allowConflict = true;
       Utils.loading('กำลังบันทึก...');
     }
 

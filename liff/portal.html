@@ -866,12 +866,16 @@
       }
 
       var time = formatTimeRange(booking.startTime, booking.endTime);
+      var dateText = formatDateThai(booking.date);
+      if (booking.endDate && String(booking.endDate).substring(0, 10) !== String(booking.date).substring(0, 10)) {
+        dateText += ' ถึง ' + formatDateThai(booking.endDate);
+      }
       var venue = booking.venue || 'รอระบุสถานที่';
       var packageText = booking.package ? '<div class="detail-row"><i class="fa-solid fa-layer-group"></i><span>แพ็กเกจ: <strong>' + escapeHtml(booking.package) + '</strong></span></div>' : '';
 
       return '<article class="booking-card">' +
         '<div class="booking-card-head">' +
-          '<div><div class="booking-date">' + escapeHtml(formatDateThai(booking.date)) + '</div>' +
+          '<div><div class="booking-date">' + escapeHtml(dateText) + '</div>' +
           '<div class="booking-kind">' + escapeHtml(jobLabel(booking.jobType)) + '</div></div>' +
           '<span class="status ' + statusClass(status) + '">' + escapeHtml(statusLabel(status)) + '</span>' +
         '</div>' +

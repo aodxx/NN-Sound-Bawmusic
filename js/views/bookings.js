@@ -82,12 +82,25 @@ function bookingsByDateKey() {
   const map = {};
   __bookingsCache.forEach(b => {
     if (!b.date) return;
-    const d = Utils.parseDate(b.date);
-    if (!d) return;
-    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-    (map[key] = map[key] || []).push(b);
+    bookingCalendarKeys(b).forEach(key => {
+      (map[key] = map[key] || []).push(b);
+    });
   });
   return map;
+}
+
+function bookingCalendarKeys(booking) {
+  const start = Utils.parseDate(booking.date);
+  const end = Utils.parseDate(booking.endDate || booking.date);
+  if (!start || !end || end < start) return [];
+  const keys = [];
+  const cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const last = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+  while (cursor <= last && keys.length < 32) {
+    keys.push(`${cursor.getFullYear()}-${cursor.getMonth()}-${cursor.getDate()}`);
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return keys;
 }
 
 function paintCalendarView() {
@@ -175,10 +188,7 @@ window.__calendarToday = () => {
 
 window.__showCalendarDayDetail = (year, month, day) => {
   const dayBookings = __bookingsCache.filter(b => {
-    if (!b.date) return false;
-    const d = Utils.parseDate(b.date);
-    if (!d) return false;
-    return d.getFullYear() === year && d.getMonth() === month && d.getDate() === day;
+    return bookingCalendarKeys(b).indexOf(`${year}-${month}-${day}`) !== -1;
   });
 
   const detailEl = document.getElementById('calendar-day-detail');
@@ -271,7 +281,10 @@ function bookingTimeRangeText(booking) {
   const start = formatBookingTime(booking.startTime);
   const end = formatBookingTime(booking.endTime);
   if (!start && !end) return '';
-  if (start && end) return start + ' - ' + end;
+  if (start && end) {
+    const overnight = booking.endDate && String(booking.endDate).substring(0, 10) !== String(booking.date).substring(0, 10);
+    return start + ' - ' + end + (overnight ? ' (ข้ามวัน)' : '');
+  }
   return start || end;
 }
 
@@ -291,7 +304,7 @@ function bookingRow(b) {
       <p class="text-base text-gray-400 mb-1"><i class="fa-solid fa-location-dot mr-1 w-3"></i>${b.venue || 'ไม่ระบุสถานที่'} ${b.province ? '· ' + b.province : ''}</p>
       ${timeText ? '<p class="text-base text-gray-400 mb-1"><i class="fa-regular fa-clock mr-1 w-3"></i>' + timeText + ' น.</p>' : ''}
       <div class="flex items-center justify-between mt-2 text-base">
-        <span class="text-gray-400"><i class="fa-regular fa-calendar mr-1 w-3"></i>${Utils.formatDate(b.date)}</span>
+        <span class="text-gray-400"><i class="fa-regular fa-calendar mr-1 w-3"></i>${Utils.formatDate(b.date)}${b.endDate && String(b.endDate).substring(0, 10) !== String(b.date).substring(0, 10) ? ' → ' + Utils.formatDate(b.endDate) : ''}</span>
         <span class="text-gold font-medium">${Utils.formatMoney(b.price)}</span>
       </div>
     </div>
